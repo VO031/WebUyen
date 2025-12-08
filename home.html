@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Home - Quản lý cuộc họp</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 25px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header {
+      background: white; border-radius: 16px; padding: 24px 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25); margin-bottom: 25px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 20px;
+    }
+    .user-info { display: flex; align-items: center; gap: 16px; }
+    .avatar { width: 56px; height: 56px; border-radius: 50%; border: 3px solid #667eea; object-fit: cover; }
+    .avatar-fallback {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 20px; font-weight: bold; border: 3px solid #fff;
+    }
+    .user-details h1 { font-size: 20px; color: #1a1a1a; margin-bottom: 4px; }
+    .user-details p { color: #666; font-size: 13px; }
+    .badge { background: #e8f5e9; color: #2e7d32; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+    .header-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-admin { background: #ff9800; color: white; border: none; padding: 12px 22px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.3s; text-decoration: none; }
+    .btn-admin:hover { background: #f57c00; transform: translateY(-2px); }
+    .logout-btn { background: #d32f2f; color: white; border: none; padding: 12px 22px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.3s; }
+    .logout-btn:hover { background: #b71c1c; transform: translateY(-2px); }
+    .content { background: white; border-radius: 16px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .content h2 { color: #1a1a1a; margin-bottom: 24px; font-size: 24px; display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; font-size: 14px; }
+    .form-group label .required { color: #d32f2f; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px;
+      font-size: 15px; font-family: inherit; transition: all 0.3s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+      outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+    .btn-primary {
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; padding: 14px 32px;
+      border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700;
+      transition: all 0.3s; width: 100%; margin-top: 15px;
+      box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+    }
+    .btn-primary:hover { background: linear-gradient(90deg, #5568d3 0%, #663991 100%); transform: translateY(-2px); }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .error-page { text-align: center; padding: 60px 20px; }
+    .error-page h1 { font-size: 48px; color: #d32f2f; margin-bottom: 16px; }
+    .participant-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #e3f2fd;
+      color: #1e88e5;
+      padding: 6px 12px; border-radius: 20px;
+      margin: 4px; font-size: 13px; font-weight: 600;
+      border: 1px solid #bbdefb;
+    }
+    .participant-tag button { background: none; border: none; color: #d32f2f; cursor: pointer; font-size: 16px; padding: 0; margin-left: 4px; }
+    .participants-list {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+      min-height: 40px; padding: 10px; border: 2px dashed #bbdefb; border-radius: 8px;
+    }
+    .empty-state { color: #999; font-size: 13px; font-style: italic; }
+    .add-participant-btn { 
+        background: #4caf50; color: white; border: none; padding: 10px 18px; 
+        border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; 
+        margin-top: 8px; transition: background 0.3s;
+    }
+    .add-participant-btn:hover { background: #388e3c; }
+    .success-message, .error-message { padding: 16px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid; font-weight: 600; }
+    .success-message { background: #e8f5e9; color: #2e7d32; border-left-color: #4caf50; }
+    .error-message { background: #ffebee; color: #d32f2f; border-left-color: #d32f2f; }
+    .success-message.show, .error-message.show { display: block; animation: slideDown 0.3s ease-out; }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; flex-wrap: wrap; }
+    .tab-btn { background: none; border: none; padding: 12px 20px; font-size: 15px; font-weight: 600; cursor: pointer; color: #999; border-bottom: 3px solid transparent; transition: all 0.3s; }
+    .tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .meetings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+    .meeting-card { 
+      background: #ffffff;
+      border: 1px solid #e0e0e0; 
+      border-radius: 12px; 
+      padding: 20px; 
+      transition: all 0.3s; 
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }
+    .meeting-card:hover { border-color: #667eea; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2); transform: translateY(-3px); }
+    .meeting-card h3 { color: #1a1a1a; margin-bottom: 12px; font-size: 18px; font-weight: 700; }
+    .meeting-card p { color: #666; font-size: 14px; margin-bottom: 8px; }
+    .meeting-card .time { color: #667eea; font-weight: 700; }
+    .meeting-card a { color: #667eea; text-decoration: underline; word-break: break-all; }
+    .google-calendar-btn {
+        background: linear-gradient(45deg, #4285F4, #34a853);
+        color: white;
+        padding: 12px 25px;
+        border-radius: 10px; 
+        font-size: 15px;
+        font-weight: 700; 
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(66, 133, 244, 0.4);
+        border: none;
+        cursor: pointer;
+    }
+    .google-calendar-btn:hover {
+        background: linear-gradient(45deg, #34a853, #4285F4);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(66, 133, 244, 0.6);
+    }
+    .document-link-group {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+        align-items: center;
+    }
+    .document-link-group input { flex: 1; margin-bottom: 0; }
+    .remove-doc-btn {
+        background: #e57373;
+        color: white;
+        border: none;
+        padding: 12px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: background 0.3s;
+    }
+    .remove-doc-btn:hover { background: #d32f2f; }
+    .add-doc-btn {
+        background: #00bcd4;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        transition: background 0.3s;
+        display: inline-block;
+        margin-top: 5px;
+    }
+    .add-doc-btn:hover { background: #0097a7; }
+    #documentModal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); display: none; }
+    #documentModal > div {
+        background-color: #fefefe; 
+        margin: 10% auto; 
+        padding: 30px; 
+        border: 1px solid #ddd; 
+        width: 90%; 
+        max-width: 650px; 
+        border-radius: 15px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        position: relative;
+    }
+    .close-btn { color: #aaa; float: right; font-size: 30px; font-weight: bold; cursor: pointer; }
+    .close-btn:hover { color: #777; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="authContent"></div>
+  </div>
+
+  <div id="documentModal">
+      <div>
+          <span onclick="closeDocumentModal()" class="close-btn">&times;</span>
+          <h2 style="font-size: 20px; margin-bottom: 10px; border-bottom: 2px solid #eee; padding-bottom: 10px;">📄 Cập nhật Tài liệu Cuộc họp</h2>
+          <p id="modalMeetingTitle" style="color: #667eea; margin-bottom: 15px; font-weight: 600;"></p>
+          
+          <div id="modalContent">
+              <div class="form-group">
+                  <label>Các Link Tài liệu</label>
+                  <div id="documentLinksContainerModal"></div>
+                  <p style="font-size: 12px; color: #d32f2f; margin-top: -5px; margin-bottom: 10px; font-weight: 600;">
+                      ⚠️ Các link tài liệu gốc không được phép để trống!
+                  </p>
+                  <button type="button" class="add-doc-btn" onclick="addModalDocumentLinkInput(document.getElementById('documentLinksContainerModal'), '')">➕ Thêm link Tài liệu mới</button>
+              </div>
+              <button class="btn-primary" id="saveDocBtn" onclick="saveDocuments()">💾 Lưu tài liệu</button>
+              <div id="modalMessage" class="error-message" style="margin-top: 15px;"></div>
+          </div>
+
+          <div id="modalView" style="display: none;">
+              <div style="max-height: 300px; overflow-y: auto; padding: 10px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                 <p id="viewLinksContainer"></p>
+              </div>
+              <button class="btn-primary" onclick="closeDocumentModal()" style="background: #999; width: auto; display: inline-block; margin-top: 20px;">Đóng</button>
+          </div>
+      </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getDatabase, ref, push, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCsbZeCIr7mMabfVIlNBWQuoAFBQYxEIu4",
+      authDomain: "iot1-8812b.firebaseapp.com",
+      databaseURL: "https://iot1-8812b-default-rtdb.firebaseio.com",
+      projectId: "iot1-8812b",
+      storageBucket: "iot1-8812b.firebasestorage.app",
+      messagingSenderId: "325115994620",
+      appId: "1:325115994620:web:c8d99d4d4b4646228d1279"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    window.firebaseDB = database;
+    window.firebaseRef = ref;
+    window.firebasePush = push;
+    window.firebaseSet = set;
+    window.firebaseOnValue = onValue;
+    window.firebaseUpdate = update;
+  </script>
+
+  <script>
+    const SYSTEM_EMAILS = [
+      "ucute2262@gmail.com",
+      "admin@yourdomain.com",
+      "user@example.com",
+      "phanvo0001@gmail.com",
+      "phanvo0004@gmail.com",
+      "phanvo0009@gmail.com",
+      "thuyuyen816@gmail.com",
+      "uyenthuy261107@gmail.com"
+    ];
+
+    let selectedParticipants = [];
+    let currentMeetingId = null;
+
+    function checkAuth() {
+      const email = sessionStorage.getItem('email');
+      const name = sessionStorage.getItem('name');
+      const picture = sessionStorage.getItem('picture');
+      const idToken = sessionStorage.getItem('id_token');
+      const is_admin = sessionStorage.getItem('is_admin') === 'true';
+
+      if (!email || !idToken) {
+        showErrorPage();
+        return;
+      }
+
+      showDashboard({ email, name, picture, is_admin });
+    }
+
+    function showErrorPage() {
+      document.getElementById('authContent').innerHTML = `
+        <div class="content error-page">
+          <h1>🔒 Chưa đăng nhập</h1>
+          <p>Bạn cần đăng nhập để truy cập trang này</p>
+          <a href="index.html" class="btn-primary" style="width:auto; display:inline-block; text-decoration:none;">Đăng nhập ngay</a>
+        </div>
+      `;
+    }
+
+    function showDashboard(userData) {
+      const { email, name, picture, is_admin } = userData;
+      const initial = name ? name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase();
+      const emailOptions = SYSTEM_EMAILS.map(e => `<option value="${e}">${e}</option>`).join('');
+      const encodedEmail = encodeURIComponent(email); 
+
+      document.getElementById('authContent').innerHTML = `
+        <div class="header">
+          <div class="user-info">
+            ${picture ? `<img src="${picture}" alt="Avatar" class="avatar" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="avatar-fallback" style="display:none;">${initial}</div>` : `<div class="avatar-fallback">${initial}</div>`}
+            <div class="user-details">
+              <h1>👋 ${name || 'User'}</h1>
+              <p>${email}</p>
+              <span class="badge">✓ Đã xác thực</span>
+            </div>
+          </div>
+          <div class="header-buttons">
+            ${is_admin ? `<a href="admin.html" class="btn-admin">⚙️ Quản lý Email</a>` : ''}
+            <button class="logout-btn" onclick="logout()">🚪 Đăng xuất</button>
+          </div>
+        </div>
+
+        <div class="content">
+          <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('create')">📝 Tạo cuộc họp</button>
+            <button class="tab-btn" onclick="switchTab('upcoming')">📅 Cuộc họp sắp tới</button>
+            <button class="tab-btn" onclick="switchTab('calendar')">🗓️ Lịch của tôi</button>
+            <button class="tab-btn" onclick="switchTab('list')">📋 Danh sách cuộc họp</button>
+          </div>
+
+          <div id="create" class="tab-content active">
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message">✅ Tạo cuộc họp thành công!</div>
+            <h2>📅 Tạo cuộc họp mới</h2>
+            
+            <form id="meetingForm" onsubmit="handleSubmit(event)">
+              <div class="form-group">
+                <label>Tên cuộc họp <span class="required">*</span></label>
+                <input type="text" id="meetingName" placeholder="Ví dụ: Họp tuần Sprint Planning" required>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Thời gian bắt đầu <span class="required">*</span></label>
+                  <input type="datetime-local" id="startTime" required>
+                </div>
+                <div class="form-group">
+                  <label>Thời gian kết thúc <span class="required">*</span></label>
+                  <input type="datetime-local" id="endTime" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Chủ tọa <span class="required">*</span></label>
+                  <select id="chairperson" required>
+                    <option value="">-- Chọn chủ tọa --</option>
+                    ${emailOptions}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Thư ký <span class="required">*</span></label>
+                  <select id="secretary" required>
+                    <option value="">-- Chọn thư ký --</option>
+                    ${emailOptions}
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Thành viên tham gia khác</label>
+                <select id="participantSelect">
+                  <option value="">-- Chọn thành viên --</option>
+                  ${emailOptions}
+                </select>
+                <button type="button" class="add-participant-btn" onclick="addParticipant()">➕ Thêm thành viên</button>
+                <div class="participants-list" id="participantsList">
+                  <span class="empty-state">Chưa có thành viên nào được thêm</span>
+                </div>
+                <p style="font-size: 12px; color: #999; margin-top: 8px;">💡 Chủ tọa, thư ký và bạn đã tự động tham gia cuộc họp</p>
+              </div>
+
+              <div class="form-group">
+                <label>Địa điểm / Link họp <span class="required">*</span></label>
+                <input type="text" id="location" placeholder="Ví dụ: Phòng họp A1 hoặc https://meet.google.com/abc-defg-hij" required>
+              </div>
+              
+              <div class="form-group">
+                <label>Link Tài liệu</label>
+                <div id="documentLinksContainer"></div>
+                <button type="button" class="add-doc-btn" onclick="addDocumentLinkInput()">➕ Thêm link Tài liệu</button>
+              </div>
+
+              <button type="submit" class="btn-primary" id="submitBtn">✨ Tạo cuộc họp</button>
+            </form>
+          </div>
+
+          <div id="upcoming" class="tab-content">
+            <h2>📅 Cuộc họp sắp tới của bạn</h2>
+            <div id="upcomingContainer" class="meetings-grid">
+              <p style="text-align: center; padding: 20px; grid-column: 1/-1;">Đang tải...</p>
+            </div>
+          </div>
+          
+          <div id="calendar" class="tab-content">
+            <h2>🗓️ Lịch Google của tôi</h2>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; flex-wrap: wrap; gap: 10px;">
+                <p style="color: #555; margin: 0; font-size: 15px;">💡 Lịch của bạn (${email}) hiển thị bên dưới.</p>
+                <a href="https://calendar.google.com/calendar/r" target="_blank" class="google-calendar-btn">🗓️ Sửa lịch trên Google Calendar</a>
+            </div>
+
+            <div style="height: 600px; width: 100%; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 15px rgba(0,0,0,0.1);">
+              <iframe
+                src="https://calendar.google.com/calendar/embed?src=${encodedEmail}&ctz=Asia%2FHo_Chi_Minh"
+                style="border-width:0; width:100%; height:100%;"
+                frameborder="0"
+                scrolling="no"
+              ></iframe>
+            </div>
+          </div>
+
+          <div id="list" class="tab-content">
+            <h2>📋 Danh sách cuộc họp đã qua (20 gần nhất)</h2>
+            <div id="meetingsContainer" class="meetings-grid">
+              <p style="text-align: center; padding: 20px; grid-column: 1/-1;">Đang tải...</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('startTime').value = now.toISOString().slice(0, 16);
+
+      const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+      document.getElementById('endTime').value = endTime.toISOString().slice(0, 16);
+
+      document.getElementById('chairperson').addEventListener('change', updateParticipantDropdown);
+      document.getElementById('secretary').addEventListener('change', updateParticipantDropdown);
+
+      addDocumentLinkInput();
+      loadMeetings();
+    }
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById(tabName).classList.add('active');
+      if (tabName === 'list') loadMeetings();
+      if (tabName === 'upcoming') loadUpcomingMeetings();
+    }
+
+    function addDocumentLinkInput(initialLink = '') {
+      const container = document.getElementById('documentLinksContainer');
+      const newGroup = document.createElement('div');
+      newGroup.className = 'document-link-group';
+
+      const newInput = document.createElement('input');
+      newInput.type = 'url';
+      newInput.placeholder = 'Nhập link tài liệu (Ví dụ: https://docs.google.com/...)';
+      newInput.className = 'document-link-input'; 
+      newInput.value = initialLink;
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className = 'remove-doc-btn';
+      removeButton.textContent = 'Xóa';
+      removeButton.onclick = () => {
+        container.removeChild(newGroup);
+      };
+      
+      newGroup.appendChild(newInput);
+      newGroup.appendChild(removeButton);
+      container.appendChild(newGroup);
+    }
+    
+    function addModalDocumentLinkInput(container, initialLink = '', isOriginal = false) { 
+        const newGroup = document.createElement('div');
+        newGroup.className = 'document-link-group';
+
+        const newInput = document.createElement('input');
+        newInput.type = 'url';
+        newInput.placeholder = isOriginal ? 'Link gốc (Không được để trống)' : 'Nhập link tài liệu...';
+        newInput.className = 'modal-document-link-input'; 
+        
+        if (isOriginal) {
+            newInput.classList.add('original-link-input'); 
+        }
+        
+        newInput.value = initialLink;
+        newGroup.appendChild(newInput);
+        
+        if (!isOriginal) {
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.className = 'remove-doc-btn';
+            removeButton.textContent = 'Xóa';
+            removeButton.onclick = () => {
+                container.removeChild(newGroup);
+            };
+            newGroup.appendChild(removeButton);
+        }
+        
+        container.appendChild(newGroup);
+    }
+
+    function showEditDocumentModal(meetingId, title, documentLinks, canEdit) {
+        currentMeetingId = meetingId;
+        const modal = document.getElementById('documentModal');
+        const modalTitle = document.getElementById('modalMeetingTitle');
+        const modalContent = document.getElementById('modalContent');
+        const modalView = document.getElementById('modalView');
+        const linksContainerModal = document.getElementById('documentLinksContainerModal');
+        const modalH2 = document.querySelector('#documentModal h2');
+
+        modalTitle.textContent = `Cuộc họp: ${title}`;
+
+        if (canEdit) {
+            modalContent.style.display = 'block';
+            modalView.style.display = 'none';
+            modalH2.textContent = '✏️ Cập nhật Tài liệu Cuộc họp';
+            
+            linksContainerModal.innerHTML = '';
+            
+            if (documentLinks.length > 0) {
+                 documentLinks.forEach((link) => {
+                     addModalDocumentLinkInput(linksContainerModal, link, true); 
+                 });
+            }
+            addModalDocumentLinkInput(linksContainerModal, '', false); 
+
+        } else {
+            modalContent.style.display = 'none';
+            modalView.style.display = 'block';
+            modalH2.textContent = '👁️ Xem Tài liệu Cuộc họp';
+            
+            const viewLinksContainer = document.getElementById('viewLinksContainer');
+            const linksHtml = documentLinks.length > 0 
+                ? documentLinks.map(link => 
+                    `<p style="font-size: 14px; margin: 8px 0;">
+                        <a href="${link}" target="_blank" style="color: #667eea; text-decoration: underline; word-break: break-all;">${link}</a>
+                    </p>`).join('')
+                : '<p style="color: #999;">Chưa có tài liệu đính kèm.</p>';
+            viewLinksContainer.innerHTML = linksHtml;
+        }
+        
+        modal.style.display = 'block';
+    }
+
+    function viewDocuments(meetingId, title, documentLinks) {
+        showEditDocumentModal(meetingId, title, documentLinks, false); 
+    }
+
+    function closeDocumentModal() {
+        document.getElementById('documentModal').style.display = 'none';
+    }
+
+    async function saveDocuments() {
+        const meetingId = currentMeetingId;
+        const saveBtn = document.getElementById('saveDocBtn');
+        const modalMessage = document.getElementById('modalMessage');
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = '⏳ Đang lưu...';
+
+        try {
+            if (!meetingId) throw new Error('Không tìm thấy ID cuộc họp.');
+            
+            const linksInputs = document.querySelectorAll('.modal-document-link-input');
+            
+            linksInputs.forEach(input => {
+                if (input.classList.contains('original-link-input') && !input.value.trim()) {
+                    throw new Error('Tất cả link tài liệu gốc không được phép để trống!');
+                }
+            });
+            
+            const finalLinks = Array.from(linksInputs)
+                                   .map(input => input.value.trim())
+                                   .filter(link => link); 
+
+            const meetingRef = window.firebaseRef(window.firebaseDB, `meetings/${meetingId}`);
+            
+            await window.firebaseUpdate(meetingRef, { documentLinks: finalLinks });
+
+            modalMessage.innerHTML = '✅ Cập nhật tài liệu thành công!';
+            modalMessage.style.display = 'block';
+            modalMessage.style.backgroundColor = '#e8f5e9';
+            modalMessage.style.color = '#2e7d32';
+            modalMessage.style.borderLeftColor = '#4caf50';
+            
+            loadMeetings();
+            
+            setTimeout(() => {
+                closeDocumentModal();
+            }, 1500);
+
+        } catch (error) {
+            console.error('Lỗi lưu tài liệu:', error.message);
+            modalMessage.innerHTML = `<strong>⚠️ Lỗi:</strong> ${error.message}`;
+            modalMessage.style.display = 'block';
+            modalMessage.style.backgroundColor = '#ffebee';
+            modalMessage.style.color = '#d32f2f';
+            modalMessage.style.borderLeftColor = '#d32f2f';
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = '💾 Lưu tài liệu';
+        }
+    }
+
+    function loadMeetings() {
+      const container = document.getElementById('meetingsContainer');
+      if (!container) return;
+
+      const currentEmail = sessionStorage.getItem('email');
+      const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
+      
+      window.firebaseOnValue(meetingsRef, (snapshot) => {
+        let pastMeetings = [];
+        const data = snapshot.val();
+
+        if (!data) {
+          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào</p>';
+          return;
+        }
+
+        const now = new Date();
+
+        Object.keys(data).forEach(key => {
+          const meeting = { id: key, ...data[key] };
+          
+          const isChairperson = meeting.chairperson === currentEmail;
+          const isSecretary = meeting.secretary === currentEmail;
+          const isParticipant = meeting.members && meeting.members.includes(currentEmail);
+          const isCreator = meeting.createdBy === currentEmail;
+
+          if (isChairperson || isSecretary || isParticipant || isCreator) {
+            const meetingEnd = new Date(meeting.endDatetime);
+            
+            if (meetingEnd <= now) { 
+              pastMeetings.push({
+                ...meeting,
+                endTime: meetingEnd.getTime()
+              });
+            }
+          }
+        });
+
+        pastMeetings.sort((a, b) => b.endTime - a.endTime);
+        pastMeetings = pastMeetings.slice(0, 20);
+
+        if (pastMeetings.length === 0) {
+          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào đã qua</p>';
+          return;
+        }
+
+        container.innerHTML = pastMeetings.map(meeting => {
+          const roleTag = meeting.chairperson === currentEmail ? '🎤 Chủ tọa' : 
+                         meeting.secretary === currentEmail ? '📝 Thư ký' : 
+                         meeting.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
+          
+          const allMembers = [];
+          if (meeting.chairperson) allMembers.push(`🎤 ${meeting.chairperson}`);
+          if (meeting.secretary) allMembers.push(`📝 ${meeting.secretary}`);
+          if (meeting.members && meeting.members.length > 0) {
+            meeting.members.forEach(m => allMembers.push(`👤 ${m}`));
+          }
+          
+          const isChairperson = meeting.chairperson === currentEmail;
+          const isSecretary = meeting.secretary === currentEmail;
+          const canEditDocuments = isChairperson || isSecretary;
+
+          const existingLinks = meeting.documentLinks || [];
+          const safeTitle = meeting.title ? meeting.title.replace(/'/g, "\\'") : 'N/A';
+          const linksForEdit = existingLinks.map(link => link.replace(/'/g, "\\'"));
+          
+          const documentsHtml = existingLinks.length > 0 
+            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+                <p style="margin-bottom: 6px; font-weight: 600;">📄 Tài liệu đính kèm:</p>
+                ${existingLinks.slice(0, 2).map(link => 
+                    `<p style="font-size: 13px; margin: 2px 0;">
+                        <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link.length > 50 ? link.substring(0, 50) + '...' : link}</a>
+                    </p>`
+                ).join('')}
+                ${existingLinks.length > 2 ? `<p style="font-size: 13px; color: #999;">... và ${existingLinks.length - 2} link khác</p>` : ''}
+              </div>`
+            : `<p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
+
+          let editButtonText;
+          let editButtonColor;
+          if (canEditDocuments) {
+              if (existingLinks.length === 0) {
+                  editButtonText = '➕ Thêm Tài liệu';
+                  editButtonColor = '#4caf50';
+              } else {
+                  editButtonText = '✏️ Sửa Tài liệu';
+                  editButtonColor = '#ff9800';
+              }
+          }
+          
+          const viewEditButtons = `
+            <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+                <button 
+                    style="background: #00bcd4; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;"
+                    onmouseover="this.style.background='#0097a7'" onmouseout="this.style.background='#00bcd4'"
+                    onclick="viewDocuments('${meeting.id}', '${safeTitle}', [${linksForEdit.map(l => `'${l}'`).join(', ')}])"
+                >
+                    👁️ Xem Tài liệu (${existingLinks.length})
+                </button>
+                ${canEditDocuments ? 
+                    `<button 
+                        style="background: ${editButtonColor}; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;"
+                        onmouseover="this.style.background='${editButtonColor === '#4caf50' ? '#388e3c' : '#f57c00'}'" onmouseout="this.style.background='${editButtonColor}'"
+                        onclick="showEditDocumentModal('${meeting.id}', '${safeTitle}', [${linksForEdit.map(l => `'${l}'`).join(', ')}], true)"
+                    >
+                        ${editButtonText}
+                    </button>`
+                    : ''
+                }
+            </div>
+          `;
+          
+          const membersHtml = allMembers.length > 0
+            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+                <p style="margin-bottom: 6px; font-weight: 600;">👥 Danh sách tham gia (${allMembers.length}):</p>
+                ${allMembers.map(m => `<p style="font-size: 13px; margin: 2px 0; color: #444;">${m}</p>`).join('')}
+              </div>`
+            : '';
+            
+          return `
+            <div class="meeting-card">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; gap: 8px;">
+                <h3 style="margin: 0; flex: 1;">🗓️ ${meeting.title || 'Không có tên'}</h3>
+                <span style="background: #999; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
+              </div>
+              <p><strong>🎤 Chủ tọa:</strong> ${meeting.chairperson || 'N/A'}</p>
+              <p><strong>📝 Thư ký:</strong> ${meeting.secretary || 'N/A'}</p>
+              <p class="time" style="margin: 8px 0;"><strong>⏰ Thời gian:</strong><br>${formatDate(meeting.startDatetime)}<br>${formatTime(meeting.startDatetime)} - ${formatTime(meeting.endDatetime)}</p>
+              <p><strong>📍 Địa điểm:</strong><br>${meeting.meetingLink || 'N/A'}</p>
+              <p><strong>✨ Người tạo:</strong> ${meeting.createdBy || 'N/A'}</p>
+              ${membersHtml}
+              ${documentsHtml}
+              ${viewEditButtons}
+              <p style="font-size: 11px; color: #999; margin-top: 12px; padding-top: 8px; border-top: 1px solid #f0f0f0;">📅 Được tạo: ${new Date(meeting.createdAt).toLocaleString('vi-VN')}</p>
+            </div>
+          `;
+        }).join('');
+      });
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('vi-VN', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+
+    function formatTime(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    function getMeetingStatus(startDatetime) {
+      const now = new Date();
+      const start = new Date(startDatetime);
+      const diffMs = start - now;
+
+      if (diffMs <= 0) return { text: 'Đã bắt đầu/Quá giờ', color: '#999999' };
+
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHour = Math.floor(diffMin / 60);
+      const diffDay = Math.floor(diffHour / 24);
+
+      let text;
+      let color;
+
+      if (diffDay > 1) { 
+        text = `Còn ${diffDay} ngày`;
+        color = '#4caf50';
+      } else if (diffHour >= 1) { 
+        const remainingMinutes = diffMin % 60;
+        text = `Còn ${diffHour} giờ ${remainingMinutes} phút`;
+        color = '#ff9800';
+      } else if (diffMin > 0) { 
+        text = `Còn ${diffMin} phút`;
+        color = '#d32f2f';
+      } else { 
+        text = 'Trong vài giây nữa';
+        color = '#d32f2f';
+      }
+      
+      return { text, color };
+    }
+      
+    function loadUpcomingMeetings() {
+      const container = document.getElementById('upcomingContainer');
+      if (!container) return;
+
+      const currentEmail = sessionStorage.getItem('email');
+      const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
+      
+      window.firebaseOnValue(meetingsRef, (snapshot) => {
+        let upcomingMeetings = [];
+        const data = snapshot.val();
+
+        if (!data) {
+          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào</p>';
+          return;
+        }
+
+        const now = new Date();
+
+        Object.keys(data).forEach(key => {
+          const meeting = { id: key, ...data[key] };
+          
+          const isChairperson = meeting.chairperson === currentEmail;
+          const isSecretary = meeting.secretary === currentEmail;
+          const isParticipant = meeting.members && meeting.members.includes(currentEmail);
+          const isCreator = meeting.createdBy === currentEmail;
+
+          if (isChairperson || isSecretary || isParticipant || isCreator) {
+            const meetingStart = new Date(meeting.startDatetime);
+            
+            if (meetingStart > now) {
+              upcomingMeetings.push({
+                ...meeting,
+                startTime: meetingStart.getTime()
+              });
+            }
+          }
+        });
+
+        upcomingMeetings.sort((a, b) => a.startTime - b.startTime);
+        upcomingMeetings = upcomingMeetings.slice(0, 10);
+
+        if (upcomingMeetings.length === 0) {
+          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp sắp tới của bạn</p>';
+          return;
+        }
+
+        container.innerHTML = upcomingMeetings.map(meeting => {
+          const roleTag = meeting.chairperson === currentEmail ? '🎤 Chủ tọa' : 
+                         meeting.secretary === currentEmail ? '📝 Thư ký' : 
+                         meeting.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
+          
+          const allMembers = [];
+          if (meeting.chairperson) allMembers.push(`🎤 ${meeting.chairperson}`);
+          if (meeting.secretary) allMembers.push(`📝 ${meeting.secretary}`);
+          if (meeting.members && meeting.members.length > 0) {
+            meeting.members.forEach(m => allMembers.push(`👤 ${m}`));
+          }
+          
+          const documentsHtml = meeting.documentLinks && meeting.documentLinks.length > 0 
+            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+                <p style="margin-bottom: 6px; font-weight: 600;">📄 Tài liệu:</p>
+                ${meeting.documentLinks.map(link => 
+                  `<p style="font-size: 13px; margin: 2px 0;">
+                    <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link.length > 50 ? link.substring(0, 50) + '...' : link}</a>
+                  </p>`).join('')}
+              </div>`
+            : `<p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
+          
+          const membersHtml = allMembers.length > 0
+            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+                <p style="margin-bottom: 6px; font-weight: 600;">👥 Danh sách tham gia (${allMembers.length}):</p>
+                ${allMembers.map(m => `<p style="font-size: 13px; margin: 2px 0; color: #444;">${m}</p>`).join('')}
+              </div>`
+            : '';
+          
+          const status = getMeetingStatus(meeting.startDatetime); 
+          const timeRemaining = status.text;
+          const urgencyColor = status.color;
+
+          return `
+            <div class="meeting-card">
+              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; gap: 8px;">
+                <h3 style="margin: 0; flex: 1;">🗓️ ${meeting.title || 'Không có tên'}</h3>
+                <div style="display:flex; flex-direction: column; gap: 4px; align-items: flex-end;"> 
+                  <span style="background: ${urgencyColor}; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">⏳ ${timeRemaining}</span> 
+                  <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
+                </div>
+              </div>
+              <p><strong>🎤 Chủ tọa:</strong> ${meeting.chairperson || 'N/A'}</p>
+              <p><strong>📝 Thư ký:</strong> ${meeting.secretary || 'N/A'}</p>
+              <p class="time" style="margin: 8px 0;"><strong>⏰ Thời gian:</strong><br>${formatDate(meeting.startDatetime)}<br>${formatTime(meeting.startDatetime)} - ${formatTime(meeting.endDatetime)}</p>
+              <p><strong>📍 Địa điểm:</strong><br>${meeting.meetingLink || 'N/A'}</p>
+              <p><strong>✨ Người tạo:</strong> ${meeting.createdBy || 'N/A'}</p>
+              ${membersHtml}
+              ${documentsHtml}
+              <p style="font-size: 11px; color: #999; margin-top: 12px; padding-top: 8px; border-top: 1px solid #f0f0f0;">📅 Được tạo: ${new Date(meeting.createdAt).toLocaleString('vi-VN')}</p>
+            </div>
+          `;
+        }).join('');
+      });
+    }
+
+    function updateParticipantDropdown() {
+      const select = document.getElementById('participantSelect');
+      const chairperson = document.getElementById('chairperson').value;
+      const secretary = document.getElementById('secretary').value;
+      const creator = sessionStorage.getItem('email');
+      
+      const excludedEmails = [chairperson, secretary, creator].filter(e => e);
+      
+      select.innerHTML = '<option value="">-- Chọn thành viên --</option>';
+      
+      SYSTEM_EMAILS.forEach(email => {
+        if (!excludedEmails.includes(email) && !selectedParticipants.includes(email)) {
+          const option = document.createElement('option');
+          option.value = email;
+          option.textContent = email;
+          select.appendChild(option);
+        }
+      });
+    }
+
+    function addParticipant() {
+      const select = document.getElementById('participantSelect');
+      const email = select.value;
+      if (!email) { alert('Vui lòng chọn thành viên!'); return; }
+      
+      selectedParticipants.push(email);
+      updateParticipantsList();
+      updateParticipantDropdown();
+    }
+
+    function removeParticipant(email) {
+      selectedParticipants = selectedParticipants.filter(e => e !== email);
+      updateParticipantsList();
+      updateParticipantDropdown();
+    }
+
+    function updateParticipantsList() {
+      const listDiv = document.getElementById('participantsList');
+      if (selectedParticipants.length === 0) {
+        listDiv.innerHTML = '<span class="empty-state">Chưa có thành viên nào được thêm</span>';
+        return;
+      }
+      listDiv.innerHTML = selectedParticipants.map(email => `
+        <div class="participant-tag">
+          <span>${email}</span>
+          <button type="button" onclick="removeParticipant('${email}')">×</button>
+        </div>
+      `).join('');
+    }
+
+    async function handleSubmit(event) {
+      event.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      const errorMsg = document.getElementById('errorMessage');
+      const successMsg = document.getElementById('successMessage');
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Đang lưu...';
+
+      try {
+        const documentLinksInputs = document.querySelectorAll('#documentLinksContainer .document-link-input');
+        const documentLinks = Array.from(documentLinksInputs).map(input => input.value.trim()).filter(link => link);
+        
+        const meetingData = {
+          title: document.getElementById('meetingName').value,
+          startDatetime: document.getElementById('startTime').value,
+          endDatetime: document.getElementById('endTime').value,
+          chairperson: document.getElementById('chairperson').value,
+          secretary: document.getElementById('secretary').value,
+          members: selectedParticipants,
+          meetingLink: document.getElementById('location').value,
+          documentLinks: documentLinks,
+          createdBy: sessionStorage.getItem('email'),
+          createdAt: new Date().toISOString(),
+          startTimestamp: new Date(document.getElementById('startTime').value).getTime(),
+          endTimestamp: new Date(document.getElementById('endTime').value).getTime(),
+          host: sessionStorage.getItem('email'),
+          isNotified: false
+        };
+
+        if (new Date(meetingData.startDatetime) >= new Date(meetingData.endDatetime)) {
+          throw new Error('Thời gian kết thúc phải sau thời gian bắt đầu!');
+        }
+
+        if (meetingData.chairperson === meetingData.secretary) {
+          throw new Error('Chủ tọa và thư ký không thể là cùng một người!');
+        }
+
+        const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
+        const newMeetingRef = window.firebasePush(meetingsRef);
+        await window.firebaseSet(newMeetingRef, meetingData);
+
+        console.log('✅ Lưu cuộc họp thành công!', meetingData);
+        errorMsg.classList.remove('show');
+        successMsg.classList.add('show');
+        
+        setTimeout(() => { successMsg.classList.remove('show'); }, 3000);
+
+        document.getElementById('meetingForm').reset();
+        
+        document.getElementById('documentLinksContainer').innerHTML = '';
+        addDocumentLinkInput();
+
+        selectedParticipants = [];
+        updateParticipantsList();
+
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('startTime').value = now.toISOString().slice(0, 16);
+        const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+        document.getElementById('endTime').value = endTime.toISOString().slice(0, 16);
+
+      } catch (error) {
+        console.error('Lỗi:', error.message);
+        errorMsg.innerHTML = `<strong>⚠️ Lỗi:</strong> ${error.message}`;
+        errorMsg.classList.add('show');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '✨ Tạo cuộc họp';
+      }
+    }
+
+    function logout() {
+      if (confirm('Bạn có chắc muốn đăng xuất?')) {
+        sessionStorage.clear();
+        window.location.href = 'index.html';
+      }
+    }
+
+    window.onload = checkAuth;
+  </script>
+</body>
+</html>

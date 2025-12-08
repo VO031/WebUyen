@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Đăng nhập bằng Google</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      min-height: 100vh; 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+    }
+    .card { 
+      background: #fff; 
+      padding: 70px 55px;
+      border-radius: 22px; 
+      box-shadow: 0 18px 55px rgba(0,0,0,0.28); 
+      width: 100%;
+      max-width: 560px; 
+      text-align: center; 
+      transform: scale(1.15);
+    }
+    .logo {
+      width: 90px;
+      height: 90px;
+      margin: 0 auto 20px;
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    h1 { 
+      font-size: 24px; 
+      margin: 0 0 8px;
+      color: #1a1a1a;
+      font-weight: 600;
+    }
+    .subtitle {
+      color: #666; 
+      margin-bottom: 28px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    #g_button { 
+      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+    }
+    .error { 
+      color: #d32f2f; 
+      background: #ffebee; 
+      padding: 14px; 
+      border-radius: 8px; 
+      margin-top: 16px; 
+      font-size: 14px;
+      line-height: 1.4;
+      border-left: 4px solid #d32f2f;
+      text-align: left;
+      display: none;
+    }
+    .error.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid #e0e0e0;
+      font-size: 12px;
+      color: #999;
+    }
+    .loading {
+      display: none;
+      margin-top: 16px;
+      color: #667eea;
+      font-size: 14px;
+    }
+    .loading.show {
+      display: block;
+    }
+  </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCsbZeCIr7mMabfVIlNBWQuoAFBQYxEIu4",
+      authDomain: "iot1-8812b.firebaseapp.com",
+      databaseURL: "https://iot1-8812b-default-rtdb.firebaseio.com",
+      projectId: "iot1-8812b",
+      storageBucket: "iot1-8812b.firebasestorage.app",
+      messagingSenderId: "325115994620",
+      appId: "1:325115994620:web:c8d99d4d4b4646228d1279"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    window.firebaseDB = database;
+    window.firebaseRef = ref;
+    window.firebaseOnValue = onValue;
+  </script>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <img src="img/Screenshot 2025-12-06 004751.png" alt="Logo">
+    </div>
+
+    <h1>Đăng nhập</h1>
+    <p class="subtitle">Sử dụng tài khoản Google để tiếp tục</p>
+
+    <div id="g_button"></div>
+    
+    <div id="loadingMsg" class="loading">Đang xử lý...</div>
+    <div id="errorMsg" class="error"></div>
+
+    <div class="footer">
+      Chỉ đăng nhập thành công<br>nếu có tài khoản <strong>trong hệ thống</strong>
+    </div>
+  </div>
+
+  <script>
+    const CLIENT_ID = "342595955640-k6qg5h3q60n04jr9t1h546ob28q9s094.apps.googleusercontent.com";
+    const ADMIN_EMAIL = "ucute2262@gmail.com"; 
+
+    let ALLOWED_EMAILS = [];
+    let isFirebaseLoaded = false;
+    let authAttempted = false;
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMsg');
+      errorDiv.innerHTML = '<strong>❌ Lỗi:</strong> ' + message;
+      errorDiv.classList.add('show');
+      
+      setTimeout(() => {
+        errorDiv.classList.remove('show');
+      }, 6000);
+    }
+
+    function showLoading(show) {
+      const loadingDiv = document.getElementById('loadingMsg');
+      if (show) {
+        loadingDiv.classList.add('show');
+      } else {
+        loadingDiv.classList.remove('show');
+      }
+    }
+
+    function parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+          }).join('')
+        );
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("Parse JWT error:", e);
+        return null;
+      }
+    }
+
+    function handleCredentialResponse(response) {
+      if (authAttempted) return;
+      authAttempted = true;
+
+      console.log("✅ Nhận được credential từ Google");
+      showLoading(true);
+
+      const payload = parseJwt(response.credential);
+      
+      if (!payload) {
+        showLoading(false);
+        authAttempted = false;
+        showError("Không thể xác thực thông tin. Vui lòng thử lại.");
+        return;
+      }
+
+      const userEmail = payload.email;
+      const userName = payload.name;
+      
+      console.log("👤 User:", userName);
+      console.log("📧 Email:", userEmail);
+      
+      if (!isFirebaseLoaded) {
+          showLoading(false);
+          authAttempted = false;
+          showError("Đang tải cấu hình hệ thống. Vui lòng thử lại sau vài giây.");
+          return;
+      }
+
+      if (!ALLOWED_EMAILS.includes(userEmail)) {
+        showLoading(false);
+        authAttempted = false;
+        showError(
+          `Email "<strong>${userEmail}</strong>" không có quyền truy cập hệ thống.<br><br>` +
+          `Vui lòng liên hệ quản trị viên để được cấp quyền.`
+        );
+        console.warn("🚫 Unauthorized email:", userEmail);
+        return;
+      }
+
+      const is_admin = userEmail === ADMIN_EMAIL;
+      
+      const userData = {
+        id_token: response.credential,
+        name: userName,
+        email: userEmail,
+        picture: payload.picture || "",
+        is_admin: is_admin,
+        loginTime: new Date().toISOString()
+      };
+
+      Object.keys(userData).forEach(key => {
+        sessionStorage.setItem(key, userData[key]);
+      });
+
+      console.log("✅ Đăng nhập thành công! Admin:", is_admin);
+      console.log("📄 Chuyển hướng đến home.html...");
+
+      setTimeout(() => {
+        window.location.href = "home.html";
+      }, 500);
+    }
+    
+    function loadAllowedEmails() {
+      if (typeof window.firebaseDB === 'undefined') {
+          console.error("Firebase chưa được khởi tạo!");
+          return;
+      }
+      
+      const allowedRef = window.firebaseRef(window.firebaseDB, 'allowed_emails');
+      
+      window.firebaseOnValue(allowedRef, (snapshot) => {
+        const data = snapshot.val();
+        ALLOWED_EMAILS = data ? Object.values(data) : [];
+        
+        if (!ALLOWED_EMAILS.includes(ADMIN_EMAIL)) {
+            ALLOWED_EMAILS.push(ADMIN_EMAIL);
+        }
+        
+        isFirebaseLoaded = true;
+        console.log(`✅ Đã tải ${ALLOWED_EMAILS.length} email được phép từ Firebase.`);
+      }, (error) => {
+          console.error("Lỗi tải danh sách email từ Firebase:", error);
+          showError("Lỗi kết nối CSDL! Vui lòng kiểm tra console log.");
+          isFirebaseLoaded = true;
+      });
+    }
+
+    window.onload = function () {
+      console.log("🚀 Đang khởi tạo Google Sign-In...");
+      
+      loadAllowedEmails();
+      
+      if (!CLIENT_ID || CLIENT_ID.includes("YOUR_")) {
+        showError("Vui lòng cấu hình CLIENT_ID trong file index.html");
+        document.getElementById('g_button').innerHTML = 
+          '<div style="color:#d32f2f;padding:10px;border:1px solid #d32f2f;border-radius:6px;">⚠️ Chưa cấu hình CLIENT_ID</div>';
+        return;
+      }
+
+      try {
+        google.accounts.id.initialize({
+          client_id: CLIENT_ID,
+          callback: handleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true
+        });
+
+        google.accounts.id.renderButton(
+          document.getElementById("g_button"),
+          { 
+            theme: "outline", 
+            size: "large", 
+            width: 280,
+            text: "signin_with",
+            shape: "rectangular",
+            logo_alignment: "left"
+          }
+        );
+
+        console.log("✅ Google Sign-In đã sẵn sàng!");
+        
+      } catch (error) {
+        console.error("❌ Lỗi khởi tạo Google Sign-In:", error);
+        showError("Không thể tải Google Sign-In. Vui lòng kiểm tra kết nối internet.");
+      }
+    };
+
+    window.addEventListener('error', function(e) {
+      if (e.message && e.message.includes('GSI_LOGGER')) {
+        console.error("❌ Origin không được phép:", window.location.origin);
+        showError(
+          `<strong>Origin không được phép!</strong><br><br>` +
+          `Vui lòng thêm <code>${window.location.origin}</code> vào<br>` +
+          `<strong>Authorized JavaScript origins</strong> trong Google Cloud Console.`
+        );
+      }
+    }, true);
+  </script>
+</body>
+</html>

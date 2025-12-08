@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin - Quản lý Email</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 25px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    .header {
+      background: white; border-radius: 16px; padding: 24px 30px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25); margin-bottom: 25px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 20px;
+    }
+    .user-info { display: flex; align-items: center; gap: 16px; }
+    .avatar-fallback {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-size: 20px; font-weight: bold; border: 3px solid #fff;
+    }
+    .user-details h1 { font-size: 20px; color: #1a1a1a; margin-bottom: 4px; }
+    .user-details p { color: #666; font-size: 13px; }
+    .badge { background: #e8f5e9; color: #2e7d32; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .logout-btn { background: #d32f2f; color: white; border: none; padding: 12px 22px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.3s; }
+    .logout-btn:hover { background: #b71c1c; transform: translateY(-2px); }
+    .content { background: white; border-radius: 16px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); margin-bottom: 20px; }
+    .content h2 { color: #1a1a1a; margin-bottom: 24px; font-size: 24px; display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; font-size: 14px; }
+    .form-group input {
+      width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px;
+      font-size: 15px; font-family: inherit; transition: all 0.3s;
+    }
+    .form-group input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2); }
+    .form-row { display: grid; grid-template-columns: 1fr auto; gap: 15px; align-items: flex-end; }
+    .btn-primary {
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      color: white; border: none; padding: 12px 32px;
+      border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 700;
+      transition: all 0.3s; box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+    }
+    .btn-primary:hover { background: linear-gradient(90deg, #5568d3 0%, #663991 100%); transform: translateY(-2px); }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .error-message, .success-message { padding: 16px; border-radius: 8px; margin-bottom: 20px; display: none; border-left: 5px solid; font-weight: 600; }
+    .success-message { background: #e8f5e9; color: #2e7d32; border-left-color: #4caf50; }
+    .error-message { background: #ffebee; color: #d32f2f; border-left-color: #d32f2f; }
+    .success-message.show, .error-message.show { display: block; animation: slideDown 0.3s ease-out; }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .email-list { display: grid; gap: 12px; margin-top: 20px; }
+    .email-item {
+      background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 10px;
+      padding: 16px; display: flex; justify-content: space-between; align-items: center;
+      transition: all 0.3s;
+    }
+    .email-item:hover { background: #f0f0f0; border-color: #667eea; }
+    .email-item .email-text { flex: 1; font-size: 15px; color: #333; word-break: break-all; }
+    .email-item .btn-delete {
+      background: #e57373; color: white; border: none; padding: 8px 16px;
+      border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+      transition: background 0.3s;
+    }
+    .email-item .btn-delete:hover { background: #d32f2f; }
+    .empty-state { text-align: center; padding: 30px; color: #999; }
+    .stats { background: #f5f5f5; border-radius: 12px; padding: 20px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+    .stat-box { background: white; padding: 15px; border-radius: 8px; text-align: center; }
+    .stat-number { font-size: 28px; font-weight: 700; color: #667eea; }
+    .stat-label { font-size: 12px; color: #999; margin-top: 5px; }
+    .error-page { text-align: center; padding: 60px 20px; }
+    .error-page h1 { font-size: 48px; color: #d32f2f; margin-bottom: 16px; }
+    .back-link { display: inline-block; margin-top: 20px; color: #667eea; text-decoration: underline; cursor: pointer; font-weight: 600; }
+  </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getDatabase, ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCsbZeCIr7mMabfVIlNBWQuoAFBQYxEIu4",
+      authDomain: "iot1-8812b.firebaseapp.com",
+      databaseURL: "https://iot1-8812b-default-rtdb.firebaseio.com",
+      projectId: "iot1-8812b",
+      storageBucket: "iot1-8812b.firebasestorage.app",
+      messagingSenderId: "325115994620",
+      appId: "1:325115994620:web:c8d99d4d4b4646228d1279"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    window.firebaseDB = database;
+    window.firebaseRef = ref;
+    window.firebasePush = push;
+    window.firebaseSet = set;
+    window.firebaseOnValue = onValue;
+    window.firebaseRemove = remove;
+  </script>
+</head>
+<body>
+  <div class="container">
+    <div id="authContent"></div>
+  </div>
+
+  <script>
+    const ADMIN_EMAIL = "ucute2262@gmail.com";
+
+    function checkAuth() {
+      const email = sessionStorage.getItem('email');
+      const name = sessionStorage.getItem('name');
+      const is_admin = sessionStorage.getItem('is_admin') === 'true';
+
+      if (!email || is_admin !== true) {
+        showErrorPage();
+        return;
+      }
+
+      showAdminDashboard({ email, name });
+    }
+
+    function showErrorPage() {
+      document.getElementById('authContent').innerHTML = `
+        <div class="content error-page">
+          <h1>🔒 Truy cập bị từ chối</h1>
+          <p>Bạn không có quyền truy cập trang này.<br>Chỉ Admin mới có thể quản lý email.</p>
+          <a href="home.html" class="btn-primary" style="width:auto; display:inline-block; text-decoration:none; margin-top: 20px;">Quay lại trang chủ</a>
+        </div>
+      `;
+    }
+
+    function showAdminDashboard({ email, name }) {
+      const initial = name ? name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase();
+      
+      document.getElementById('authContent').innerHTML = `
+        <div class="header">
+          <div class="user-info">
+            <div class="avatar-fallback">${initial}</div>
+            <div class="user-details">
+              <h1>👤 ${name || 'Admin'}</h1>
+              <p>${email}</p>
+              <span class="badge">👑 Admin</span>
+            </div>
+          </div>
+          <button class="logout-btn" onclick="logout()">🚪 Đăng xuất</button>
+        </div>
+
+        <div class="content">
+          <h2>🔐 Quản lý Email Truy cập Hệ thống</h2>
+          
+          <div class="stats">
+            <div class="stat-box">
+              <div class="stat-number" id="totalEmails">0</div>
+              <div class="stat-label">Email được phép</div>
+            </div>
+          </div>
+
+          <div id="errorMessage" class="error-message"></div>
+          <div id="successMessage" class="success-message"></div>
+
+          <div class="form-group">
+            <label>Thêm Email mới <span style="color: #d32f2f;">*</span></label>
+            <div class="form-row">
+              <input type="email" id="newEmail" placeholder="Nhập email (ví dụ: user@example.com)" required>
+              <button class="btn-primary" onclick="addEmail()">➕ Thêm</button>
+            </div>
+          </div>
+
+          <div>
+            <h3 style="color: #1a1a1a; margin: 30px 0 16px; font-size: 18px;">📧 Danh sách Email được phép</h3>
+            <div class="email-list" id="emailListContainer">
+              <div class="empty-state">Đang tải...</div>
+            </div>
+          </div>
+
+          <a href="home.html" class="back-link">⬅️ Quay lại trang chủ</a>
+        </div>
+      `;
+
+      loadEmailList();
+    }
+
+    function loadEmailList() {
+      const container = document.getElementById('emailListContainer');
+      const emailsRef = window.firebaseRef(window.firebaseDB, 'allowed_emails');
+
+      window.firebaseOnValue(emailsRef, (snapshot) => {
+        const data = snapshot.val();
+        const emailsList = data ? Object.entries(data).map(([key, value]) => ({ key, email: value })) : [];
+
+        document.getElementById('totalEmails').textContent = emailsList.length;
+
+        if (emailsList.length === 0) {
+          container.innerHTML = '<div class="empty-state">Chưa có email nào được thêm vào hệ thống</div>';
+          return;
+        }
+
+        container.innerHTML = emailsList.map(({ key, email }) => `
+          <div class="email-item">
+            <span class="email-text">📧 ${email}</span>
+            <button class="btn-delete" onclick="deleteEmail('${key}', '${email.replace(/'/g, "\\'")}')">🗑️ Xóa</button>
+          </div>
+        `).join('');
+      });
+    }
+
+    function showMessage(message, type = 'success') {
+      const element = type === 'success' 
+        ? document.getElementById('successMessage')
+        : document.getElementById('errorMessage');
+      
+      const otherElement = type === 'success'
+        ? document.getElementById('errorMessage')
+        : document.getElementById('successMessage');
+
+      element.innerHTML = message;
+      element.classList.add('show');
+      otherElement.classList.remove('show');
+
+      setTimeout(() => {
+        element.classList.remove('show');
+      }, 4000);
+    }
+
+    async function addEmail() {
+      const input = document.getElementById('newEmail');
+      const email = input.value.trim();
+
+      if (!email) {
+        showMessage('Vui lòng nhập email!', 'error');
+        return;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showMessage('Email không hợp lệ!', 'error');
+        return;
+      }
+
+      try {
+        const emailsRef = window.firebaseRef(window.firebaseDB, 'allowed_emails');
+        
+        const snapshot = await new Promise((resolve) => {
+          window.firebaseOnValue(emailsRef, resolve, { onlyOnce: true });
+        });
+        
+        const existingEmails = snapshot.val() ? Object.values(snapshot.val()) : [];
+        
+        if (existingEmails.includes(email)) {
+          showMessage('Email này đã có trong hệ thống!', 'error');
+          return;
+        }
+
+        const newRef = window.firebasePush(emailsRef);
+        await window.firebaseSet(newRef, email);
+
+        showMessage(`✅ Thêm email <strong>${email}</strong> thành công!`);
+        input.value = '';
+        loadEmailList();
+      } catch (error) {
+        console.error('Lỗi:', error);
+        showMessage(`❌ Lỗi: ${error.message}`, 'error');
+      }
+    }
+
+    async function deleteEmail(key, email) {
+      if (!confirm(`Bạn có chắc muốn xóa email "${email}" khỏi hệ thống?`)) {
+        return;
+      }
+
+      try {
+        const emailRef = window.firebaseRef(window.firebaseDB, `allowed_emails/${key}`);
+        await window.firebaseRemove(emailRef);
+
+        showMessage(`✅ Xóa email <strong>${email}</strong> thành công!`);
+        loadEmailList();
+      } catch (error) {
+        console.error('Lỗi:', error);
+        showMessage(`❌ Lỗi: ${error.message}`, 'error');
+      }
+    }
+
+    function logout() {
+      if (confirm('Bạn có chắc muốn đăng xuất?')) {
+        sessionStorage.clear();
+        window.location.href = 'index.html';
+      }
+    }
+
+    window.onload = checkAuth;
+  </script>
+</body>
+</html>
