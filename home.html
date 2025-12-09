@@ -104,27 +104,7 @@
     .meeting-card p { color: #666; font-size: 14px; margin-bottom: 8px; }
     .meeting-card .time { color: #667eea; font-weight: 700; }
     .meeting-card a { color: #667eea; text-decoration: underline; word-break: break-all; }
-    .google-calendar-btn {
-        background: linear-gradient(45deg, #4285F4, #34a853);
-        color: white;
-        padding: 12px 25px;
-        border-radius: 10px; 
-        font-size: 15px;
-        font-weight: 700; 
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(66, 133, 244, 0.4);
-        border: none;
-        cursor: pointer;
-    }
-    .google-calendar-btn:hover {
-        background: linear-gradient(45deg, #34a853, #4285F4);
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(66, 133, 244, 0.6);
-    }
+    
     .document-link-group {
         display: flex;
         gap: 8px;
@@ -172,6 +152,98 @@
     }
     .close-btn { color: #aaa; float: right; font-size: 30px; font-weight: bold; cursor: pointer; }
     .close-btn:hover { color: #777; }
+    
+    /* CALENDAR STYLES */
+    .calendar-controls .nav-btn {
+        background: #667eea; color: white; border: none; padding: 8px 15px; 
+        border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; 
+        transition: background 0.3s;
+    }
+    .calendar-controls .nav-btn:hover { background: #5568d3; }
+    .days-of-week {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        text-align: center;
+        font-weight: 700;
+        color: #764ba2;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #e0e0e0;
+        margin-bottom: 10px;
+    }
+    .days-of-week > div { padding: 5px 0; }
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        grid-gap: 5px;
+    }
+    .calendar-day {
+        min-height: 80px;
+        background: white;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        border: 1px solid #f0f0f0;
+        transition: all 0.2s;
+        position: relative;
+    }
+    .calendar-day:hover {
+        border-color: #667eea;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    }
+    .calendar-day.inactive-month {
+        background: #f8f9fa;
+        color: #ccc;
+        cursor: default;
+    }
+    .calendar-day.inactive-month:hover {
+        border-color: #f0f0f0;
+        box-shadow: none;
+    }
+    .calendar-day .day-number {
+        font-weight: 700;
+        display: block;
+        margin-bottom: 5px;
+        text-align: right;
+        font-size: 16px;
+    }
+    .calendar-day.has-meeting {
+        border-color: #4caf50;
+        background: #e8f5e9;
+    }
+    .calendar-day.has-meeting .meeting-indicator {
+        position: absolute;
+        bottom: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 6px;
+        height: 6px;
+        background: #2e7d32;
+        border-radius: 50%;
+    }
+    .calendar-day.current-day {
+        border: 2px solid #d32f2f;
+        background: #ffebee;
+        box-shadow: 0 0 0 2px rgba(211, 47, 47, 0.2);
+    }
+    .meeting-summary-item {
+        margin-bottom: 10px;
+        padding: 10px;
+        border-left: 5px solid #667eea;
+        background: #f5f7ff;
+        border-radius: 6px;
+    }
+    .meeting-summary-item h4 {
+        margin: 0 0 5px 0;
+        color: #1a1a1a;
+        font-size: 15px;
+    }
+    .meeting-summary-item p {
+        margin: 0;
+        font-size: 14px;
+        color: #444;
+    }
+    #noMeetingsFound { color: #999; font-style: italic; }
   </style>
 </head>
 <body>
@@ -233,21 +305,45 @@
   </script>
 
   <script>
-    const SYSTEM_EMAILS = [
-      "ucute2262@gmail.com",
-      "admin@yourdomain.com",
-      "user@example.com",
-      "phanvo0001@gmail.com",
-      "phanvo0004@gmail.com",
-      "phanvo0009@gmail.com",
-      "thuyuyen816@gmail.com",
-      "uyenthuy261107@gmail.com"
+    // Danh sách các phòng họp cố định
+    const MEETING_ROOMS = [
+      'A11',
+      'A12',
+      'A13',
+      'A14',
+      'A15',
+      'A16',
+      'A17'
     ];
+    
+    let allSystemEmails = []; 
+    
+    // NEW FUNCTION to fetch system emails from Firebase
+    async function fetchSystemEmails() {
+      const emailsRef = window.firebaseRef(window.firebaseDB, 'allowed_emails');
+      return new Promise((resolve) => {
+        window.firebaseOnValue(emailsRef, (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            allSystemEmails = Object.values(data);
+          } else {
+            allSystemEmails = [];
+          }
+          resolve();
+        }, { onlyOnce: true });
+      });
+    }
+
+    // CALENDAR VARIABLES
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth();
+    const DAYS_OF_WEEK = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    let allMeetings = {}; // Store all fetched meetings by date 'YYYY-MM-DD'
 
     let selectedParticipants = [];
     let currentMeetingId = null;
 
-    function checkAuth() {
+    async function checkAuth() { 
       const email = sessionStorage.getItem('email');
       const name = sessionStorage.getItem('name');
       const picture = sessionStorage.getItem('picture');
@@ -258,6 +354,9 @@
         showErrorPage();
         return;
       }
+      
+      // Chờ cho danh sách email được tải trước khi hiển thị dashboard
+      await fetchSystemEmails(); 
 
       showDashboard({ email, name, picture, is_admin });
     }
@@ -275,8 +374,10 @@
     function showDashboard(userData) {
       const { email, name, picture, is_admin } = userData;
       const initial = name ? name.charAt(0).toUpperCase() : email.charAt(0).toUpperCase();
-      const emailOptions = SYSTEM_EMAILS.map(e => `<option value="${e}">${e}</option>`).join('');
-      const encodedEmail = encodeURIComponent(email); 
+      const emailOptions = allSystemEmails.map(e => `<option value="${e}">${e}</option>`).join('');
+      
+      // Tạo các thẻ <option> cho phòng họp
+      const roomOptions = MEETING_ROOMS.map(room => `<option value="${room}">${room}</option>`).join('');
 
       document.getElementById('authContent').innerHTML = `
         <div class="header">
@@ -297,7 +398,6 @@
         <div class="content">
           <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('create')">📝 Tạo cuộc họp</button>
-            <button class="tab-btn" onclick="switchTab('upcoming')">📅 Cuộc họp sắp tới</button>
             <button class="tab-btn" onclick="switchTab('calendar')">🗓️ Lịch của tôi</button>
             <button class="tab-btn" onclick="switchTab('list')">📋 Danh sách cuộc họp</button>
           </div>
@@ -353,10 +453,14 @@
                 </div>
                 <p style="font-size: 12px; color: #999; margin-top: 8px;">💡 Chủ tọa, thư ký và bạn đã tự động tham gia cuộc họp</p>
               </div>
-
+              
               <div class="form-group">
-                <label>Địa điểm / Link họp <span class="required">*</span></label>
-                <input type="text" id="location" placeholder="Ví dụ: Phòng họp A1 hoặc https://meet.google.com/abc-defg-hij" required>
+                <label>Địa điểm họp <span class="required">*</span></label>
+                <select id="location" required>
+                  <option value="">-- Chọn phòng họp --</option>
+                  ${roomOptions}
+                </select>
+                <p style="font-size: 12px; color: #999; margin-top: 8px;">💡 Nếu là họp trực tuyến, hãy ghi rõ link trong phần Tài liệu đính kèm hoặc tên cuộc họp.</p>
               </div>
               
               <div class="form-group">
@@ -369,33 +473,41 @@
             </form>
           </div>
 
-          <div id="upcoming" class="tab-content">
-            <h2>📅 Cuộc họp sắp tới của bạn</h2>
-            <div id="upcomingContainer" class="meetings-grid">
-              <p style="text-align: center; padding: 20px; grid-column: 1/-1;">Đang tải...</p>
-            </div>
-          </div>
-          
           <div id="calendar" class="tab-content">
-            <h2>🗓️ Lịch Google của tôi</h2>
+            <h2>🗓️ Lịch cuộc họp của tôi</h2>
             
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; flex-wrap: wrap; gap: 10px;">
-                <p style="color: #555; margin: 0; font-size: 15px;">💡 Lịch của bạn (${email}) hiển thị bên dưới.</p>
-                <a href="https://calendar.google.com/calendar/r" target="_blank" class="google-calendar-btn">🗓️ Sửa lịch trên Google Calendar</a>
+            <div class="calendar-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <button class="nav-btn" onclick="changeMonth(-1)">&#9664; Tháng trước</button>
+                <h3 id="currentMonthYear" style="color: #667eea; font-weight: 700; margin: 0;"></h3>
+                <button class="nav-btn" onclick="changeMonth(1)">Tháng sau &#9654;</button>
             </div>
 
-            <div style="height: 600px; width: 100%; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 15px rgba(0,0,0,0.1);">
-              <iframe
-                src="https://calendar.google.com/calendar/embed?src=${encodedEmail}&ctz=Asia%2FHo_Chi_Minh"
-                style="border-width:0; width:100%; height:100%;"
-                frameborder="0"
-                scrolling="no"
-              ></iframe>
+            <div class="calendar-grid-container" style="background: #f8f9fa; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+                <div id="calendarDaysOfWeek" class="days-of-week"></div>
+                <div id="calendarGrid" class="calendar-grid"></div>
+            </div>
+
+            <div id="dailyMeetingsList" style="margin-top: 25px; background: #fff; padding: 20px; border-radius: 12px; border: 1px solid #e0e0e0;">
+                <h3 style="color: #1a1a1a; margin-bottom: 15px;">Chi tiết cuộc họp trong ngày <span id="selectedDateTitle" style="color: #667eea;"></span></h3>
+                <p id="meetingsForDayContent" style="color: #666;">Chọn một ngày trên lịch để xem chi tiết.</p>
             </div>
           </div>
 
           <div id="list" class="tab-content">
-            <h2>📋 Danh sách cuộc họp đã qua (20 gần nhất)</h2>
+            <h2>📋 Danh sách cuộc họp</h2>
+            <div class="filter-controls" style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+                  <label>Lọc theo Ngày</label>
+                  <input type="date" id="filterDate" onchange="loadMeetings()">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+                  <label>Lọc theo Phòng</label>
+                  <select id="filterRoom" onchange="loadMeetings()">
+                    <option value="">-- Tất cả phòng --</option>
+                    </select>
+                </div>
+            </div>
+            <p style="font-style: italic; color: #666; margin-bottom: 15px;">Hiển thị tất cả cuộc họp (đã qua và sắp tới) liên quan đến bạn theo điều kiện lọc.</p>
             <div id="meetingsContainer" class="meetings-grid">
               <p style="text-align: center; padding: 20px; grid-column: 1/-1;">Đang tải...</p>
             </div>
@@ -414,7 +526,7 @@
       document.getElementById('secretary').addEventListener('change', updateParticipantDropdown);
 
       addDocumentLinkInput();
-      loadMeetings();
+      
     }
 
     function switchTab(tabName) {
@@ -422,8 +534,9 @@
       document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
       event.target.classList.add('active');
       document.getElementById(tabName).classList.add('active');
+      
       if (tabName === 'list') loadMeetings();
-      if (tabName === 'upcoming') loadUpcomingMeetings();
+      if (tabName === 'calendar') loadCalendarMeetings(); 
     }
 
     function addDocumentLinkInput(initialLink = '') {
@@ -526,10 +639,12 @@
     function viewDocuments(meetingId, title, documentLinks) {
         showEditDocumentModal(meetingId, title, documentLinks, false); 
     }
+    window.viewDocuments = viewDocuments; 
 
     function closeDocumentModal() {
         document.getElementById('documentModal').style.display = 'none';
     }
+    window.closeDocumentModal = closeDocumentModal; 
 
     async function saveDocuments() {
         const meetingId = currentMeetingId;
@@ -544,6 +659,7 @@
             
             const linksInputs = document.querySelectorAll('.modal-document-link-input');
             
+            // Validate original links (the ones rendered initially)
             linksInputs.forEach(input => {
                 if (input.classList.contains('original-link-input') && !input.value.trim()) {
                     throw new Error('Tất cả link tài liệu gốc không được phép để trống!');
@@ -582,68 +698,383 @@
             saveBtn.textContent = '💾 Lưu tài liệu';
         }
     }
+    window.saveDocuments = saveDocuments; 
+
+    // START UTILITY FUNCTIONS FOR TIME
+    function getRelativeTime(startStr, endStr) {
+        const now = new Date().getTime();
+        const start = new Date(startStr).getTime();
+        const end = new Date(endStr).getTime();
+
+        if (end < now) {
+            // Meeting is over
+            const diffPastMs = now - end;
+            const totalSeconds = Math.floor(diffPastMs / 1000);
+            const days = Math.floor(totalSeconds / (3600 * 24));
+            const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+            let result = '';
+            if (days > 0) result += `${days} ngày `;
+            if (hours > 0) result += `${hours} giờ `;
+            result += `${minutes} phút`;
+            
+            if (days === 0 && hours === 0 && minutes < 5) return `<span style="color: #D32F2F; font-weight: 700;">KẾT THÚC VỪA XONG</span>`;
+            return `<span style="color: #D32F2F; font-weight: 700;">KẾT THÚC CÁCH ĐÂY: ${result.trim()}</span>`;
+            
+        } else if (start <= now && end >= now) {
+            // Meeting is ongoing
+            const diffRemainingMs = end - now;
+            const totalSeconds = Math.floor(diffRemainingMs / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+            let result = '';
+            if (hours > 0) result += `${hours} giờ `;
+            result += `${minutes} phút`;
+
+            return `<span style="color: #FF9800; font-weight: 700;">ĐANG DIỄN RA - CÒN: ${result.trim()}</span>`;
+        } else {
+            // Meeting is upcoming
+            const diffMs = start - now;
+            const totalSeconds = Math.floor(diffMs / 1000);
+            const days = Math.floor(totalSeconds / (3600 * 24));
+            const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+            let result = '';
+            if (days > 0) result += `${days} ngày `;
+            if (hours > 0) result += `${hours} giờ `;
+            result += `${minutes} phút`;
+
+            if (days === 0 && hours === 0 && minutes < 30) return `<span style="color: #4CAF50; font-weight: 700; background: #e8f5e9; padding: 2px 6px; border-radius: 4px;">BẮT ĐẦU TRONG VÀI PHÚT!</span>`;
+            return `<span style="color: #4CAF50; font-weight: 700;">BẮT ĐẦU TRONG: ${result.trim()}</span>`;
+        }
+    }
+    window.getRelativeTime = getRelativeTime;
+    // END UTILITY FUNCTIONS FOR TIME
+
+
+    // START CALENDAR FUNCTIONS
+    function formatDateToKey(date) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    }
+
+    function renderDaysOfWeek() {
+        const container = document.getElementById('calendarDaysOfWeek');
+        if (!container) return;
+        container.innerHTML = DAYS_OF_WEEK.map(day => `<div>${day}</div>`).join('');
+    }
+
+    function changeMonth(delta) {
+        currentMonth += delta;
+        if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+        } else if (currentMonth < 0) {
+            currentMonth = 11;
+            currentYear--;
+        }
+        renderCalendar(currentYear, currentMonth, allMeetings);
+    }
+    window.changeMonth = changeMonth; 
+
+    function showDailyMeetings(dateKey) {
+        const titleElement = document.getElementById('selectedDateTitle');
+        const contentElement = document.getElementById('meetingsForDayContent');
+        const currentEmail = sessionStorage.getItem('email'); // Lấy email hiện tại
+        
+        const [year, month, day] = dateKey.split('-');
+        titleElement.textContent = `(${day}/${month}/${year})`;
+
+        const meetingsForDay = allMeetings[dateKey] || [];
+
+        if (meetingsForDay.length === 0) {
+            contentElement.innerHTML = `<p id="noMeetingsFound">Không có cuộc họp nào vào ngày này.</p>`;
+            return;
+        }
+
+        contentElement.innerHTML = meetingsForDay.map(m => {
+            const roleTag = m.chairperson === currentEmail ? '🎤 Chủ tọa' : 
+                            m.secretary === currentEmail ? '📝 Thư ký' : 
+                            m.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
+                            
+            const allMembers = [];
+            if (m.chairperson) allMembers.push(`🎤 Chủ tọa: ${m.chairperson}`);
+            if (m.secretary) allMembers.push(`📝 Thư ký: ${m.secretary}`);
+            if (m.members && m.members.length > 0) {
+                m.members.forEach(member => allMembers.push(`👤 Thành viên: ${member}`));
+            }
+            
+            const membersHtml = allMembers.length > 0
+                ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                    <p style="margin-bottom: 5px; font-weight: 600;">👥 Danh sách tham gia (${allMembers.length}):</p>
+                    ${allMembers.map(member => `<p style="font-size: 13px; margin: 2px 0; color: #444;">${member}</p>`).join('')}
+                  </div>`
+                : '';
+
+            const relativeTimeHtml = getRelativeTime(m.startDatetime, m.endDatetime); // ADDED
+            
+            const existingLinks = m.documentLinks || [];
+            const documentsHtml = existingLinks.length > 0 
+                ? `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                    <p style="margin-bottom: 5px; font-weight: 600;">📄 Tài liệu đính kèm:</p>
+                    ${existingLinks.map(link => 
+                        `<p style="font-size: 13px; margin: 2px 0;">
+                            <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link}</a>
+                        </p>`).join('')}
+                  </div>`
+                : `<p style="font-size: 13px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
+
+
+            return `
+                <div class="meeting-summary-item">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                        <h4 style="margin: 0; font-size: 16px;">🗓️ ${m.title || 'Không có tên'}</h4>
+                        <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">Vai trò: ${roleTag}</span>
+                    </div>
+                    <p>⏰ ${formatTime(m.startDatetime)} - ${formatTime(m.endDatetime)}</p>
+                    <p style="margin-bottom: 8px;">${relativeTimeHtml}</p>
+                    <p>📍 Địa điểm: ${m.meetingLink}</p>
+                    ${membersHtml}
+                    ${documentsHtml} 
+                </div>
+            `;
+        }).join('');
+    }
+    window.showDailyMeetings = showDailyMeetings; 
+
+    function renderCalendar(year, month, meetingsByDate) {
+        const grid = document.getElementById('calendarGrid');
+        const monthYearTitle = document.getElementById('currentMonthYear');
+        if (!grid || !monthYearTitle) return;
+        
+        grid.innerHTML = ''; 
+        
+        const date = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const lastDayPrevMonth = new Date(year, month, 0);
+
+        // Convert Sunday (0) start to Monday (0) start: 0(Mon)...6(Sun)
+        const firstDayOfWeek = (date.getDay() === 0 ? 6 : date.getDay() - 1); 
+        const daysInMonth = lastDay.getDate();
+        const daysInPrevMonth = lastDayPrevMonth.getDate();
+        const todayKey = formatDateToKey(new Date());
+
+        monthYearTitle.textContent = `Tháng ${month + 1}, ${year}`;
+
+        // 1. Fill leading days from previous month
+        for (let i = firstDayOfWeek; i > 0; i--) {
+            const prevDate = new Date(year, month - 1, daysInPrevMonth - i + 1);
+            const dayKey = formatDateToKey(prevDate);
+            grid.innerHTML += `
+                <div class="calendar-day inactive-month" data-date="${dayKey}">
+                    <span class="day-number">${prevDate.getDate()}</span>
+                </div>
+            `;
+        }
+
+        // 2. Fill current month days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const currentDate = new Date(year, month, day);
+            const dayKey = formatDateToKey(currentDate);
+            const hasMeeting = meetingsByDate[dayKey] && meetingsByDate[dayKey].length > 0;
+            const isToday = dayKey === todayKey;
+
+            let classList = '';
+            if (hasMeeting) classList += ' has-meeting';
+            if (isToday) classList += ' current-day';
+
+            grid.innerHTML += `
+                <div 
+                    class="calendar-day${classList}" 
+                    data-date="${dayKey}"
+                    onclick="showDailyMeetings('${dayKey}')"
+                >
+                    <span class="day-number">${day}</span>
+                    ${hasMeeting ? '<div class="meeting-indicator"></div>' : ''}
+                </div>
+            `;
+        }
+        
+        // 3. Fill trailing days from next month
+        let totalCells = firstDayOfWeek + daysInMonth;
+        let trailingDays = 42 - totalCells; 
+        if (totalCells <= 35) trailingDays = 35 - totalCells; 
+        if (totalCells > 35 && totalCells <= 42) trailingDays = 42 - totalCells;
+        
+        for (let i = 1; i <= trailingDays; i++) {
+            const nextDate = new Date(year, month + 1, i);
+            const dayKey = formatDateToKey(nextDate);
+            grid.innerHTML += `
+                <div class="calendar-day inactive-month" data-date="${dayKey}">
+                    <span class="day-number">${i}</span>
+                </div>
+            `;
+        }
+        
+        const monthKey = year + '-' + String(month + 1).padStart(2, '0');
+        const initialDateKey = todayKey.startsWith(monthKey) 
+                             ? todayKey 
+                             : (new Date(year, month, 1) < new Date() 
+                                ? monthKey + '-01' 
+                                : todayKey);
+        
+        showDailyMeetings(initialDateKey);
+    }
+    
+    function loadCalendarMeetings() {
+        renderDaysOfWeek();
+        const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
+        const currentEmail = sessionStorage.getItem('email');
+        
+        window.firebaseOnValue(meetingsRef, (snapshot) => {
+            const data = snapshot.val();
+            const meetingsByDate = {};
+
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const meeting = { id: key, ...data[key] };
+                    
+                    const isChairperson = meeting.chairperson === currentEmail;
+                    const isSecretary = meeting.secretary === currentEmail;
+                    const isParticipant = meeting.members && meeting.members.includes(currentEmail);
+                    const isCreator = meeting.createdBy === currentEmail;
+
+                    if (isChairperson || isSecretary || isParticipant || isCreator) {
+                        const date = new Date(meeting.startDatetime);
+                        const dateKey = formatDateToKey(date);
+                        
+                        if (new Date(meeting.endDatetime) > new Date()) { 
+                            if (!meetingsByDate[dateKey]) {
+                                meetingsByDate[dateKey] = [];
+                            }
+                            meetingsByDate[dateKey].push(meeting);
+                        }
+                    }
+                });
+            }
+            
+            allMeetings = meetingsByDate; 
+            renderCalendar(currentYear, currentMonth, allMeetings);
+        });
+    }
+    // END CALENDAR FUNCTIONS
 
     function loadMeetings() {
       const container = document.getElementById('meetingsContainer');
-      if (!container) return;
+      const filterDateInput = document.getElementById('filterDate');
+      const filterRoomSelect = document.getElementById('filterRoom');
+      if (!container || !filterDateInput || !filterRoomSelect) return;
 
+      // 1. Populate Room Filter options if empty (for initial load)
+      if (filterRoomSelect.options.length === 1) { // Only '-- Tất cả phòng --' exists
+          const roomOptions = MEETING_ROOMS.map(room => `<option value="${room}">${room}</option>`).join('');
+          filterRoomSelect.insertAdjacentHTML('beforeend', roomOptions);
+      }
+
+      // 2. Get Filter values
+      const filterDate = filterDateInput.value;
+      const filterRoom = filterRoomSelect.value;
       const currentEmail = sessionStorage.getItem('email');
+      
+      container.innerHTML = '<p style="text-align: center; padding: 20px; grid-column: 1/-1; color: #666;">Đang tải...</p>';
+
       const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
       
       window.firebaseOnValue(meetingsRef, (snapshot) => {
-        let pastMeetings = [];
         const data = snapshot.val();
+        let allMeetings = [];
 
         if (!data) {
           container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào</p>';
           return;
         }
-
-        const now = new Date();
-
+        
+        // Lấy tất cả cuộc họp vào một mảng
         Object.keys(data).forEach(key => {
-          const meeting = { id: key, ...data[key] };
-          
+            allMeetings.push({ id: key, ...data[key] });
+        });
+        
+        // === BẮT ĐẦU LOGIC GHI ĐÈ KHI ĐỦ 50 NODE (Ghi đè) ===
+        const MEETING_LIMIT = 50; 
+        
+        if (allMeetings.length > MEETING_LIMIT) {
+            // Sắp xếp TẤT CẢ cuộc họp theo startDatetime (cũ nhất lên đầu)
+            allMeetings.sort((a, b) => new Date(a.startDatetime) - new Date(b.startDatetime));
+            
+            // Lấy những cuộc họp cũ nhất cần xóa (ví dụ: nếu có 52, xóa 2 cái đầu)
+            const meetingsToDelete = allMeetings.slice(0, allMeetings.length - MEETING_LIMIT); 
+            
+            console.warn(`⚠️ Vượt quá ${MEETING_LIMIT} cuộc họp. Đang xóa ${meetingsToDelete.length} cuộc họp cũ nhất...`);
+            
+            meetingsToDelete.forEach(m => {
+                const meetingNodeRef = window.firebaseRef(window.firebaseDB, `meetings/${m.id}`);
+                // Xóa node cũ nhất bằng cách set giá trị null
+                window.firebaseSet(meetingNodeRef, null); 
+            });
+            
+            // Dừng xử lý hiển thị ở đây. Listener onValue sẽ tự động chạy lại khi xóa xong.
+            return; 
+        }
+        // === KẾT THÚC LOGIC GHI ĐÈ KHI ĐỦ 50 NODE ===
+
+        // 3. Filtering Logic (chỉ lọc những cuộc họp user có liên quan và theo điều kiện lọc)
+        let filteredMeetings = allMeetings.filter(meeting => {
           const isChairperson = meeting.chairperson === currentEmail;
           const isSecretary = meeting.secretary === currentEmail;
           const isParticipant = meeting.members && meeting.members.includes(currentEmail);
           const isCreator = meeting.createdBy === currentEmail;
 
-          if (isChairperson || isSecretary || isParticipant || isCreator) {
-            const meetingEnd = new Date(meeting.endDatetime);
+          // Chỉ xem xét các cuộc họp mà người dùng tham gia
+          if (!(isChairperson || isSecretary || isParticipant || isCreator)) return false;
             
-            if (meetingEnd <= now) { 
-              pastMeetings.push({
-                ...meeting,
-                endTime: meetingEnd.getTime()
-              });
-            }
-          }
+          // Lọc theo Phòng
+          const matchesRoom = !filterRoom || meeting.meetingLink === filterRoom;
+            
+          // Lọc theo Ngày
+          const meetingStartDate = meeting.startDatetime ? meeting.startDatetime.substring(0, 10) : '';
+          const matchesDate = !filterDate || meetingStartDate === filterDate;
+            
+          return matchesRoom && matchesDate;
         });
 
-        pastMeetings.sort((a, b) => b.endTime - a.endTime);
-        pastMeetings = pastMeetings.slice(0, 20);
+        // 4. Sort by start date/time (earliest first) - Đảm bảo sắp xếp lại sau khi lọc để lấy 30 cái gần nhất chính xác
+        filteredMeetings.sort((a, b) => new Date(a.startDatetime) - new Date(b.startDatetime));
 
-        if (pastMeetings.length === 0) {
-          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào đã qua</p>';
+        if (filteredMeetings.length === 0) {
+          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Không tìm thấy cuộc họp nào theo điều kiện lọc.</p>';
           return;
         }
 
-        container.innerHTML = pastMeetings.map(meeting => {
+        // === BẮT ĐẦU LOGIC GIỚI HẠN 30 CUỘC GẦN NHẤT (Chỉ hiện 30 cái gần nhất) ===
+        const MAX_MEETINGS_TO_SHOW = 30;
+        let meetingsToShow = filteredMeetings;
+        
+        if (filteredMeetings.length > MAX_MEETINGS_TO_SHOW) {
+            // Vì đã sắp xếp theo ngày tăng dần (cũ nhất -> mới nhất), 
+            // nên 30 phần tử cuối cùng là 30 cuộc họp gần nhất/sắp tới.
+            meetingsToShow = filteredMeetings.slice(-MAX_MEETINGS_TO_SHOW); 
+        }
+        // === KẾT THÚC LOGIC GIỚI HẠN 30 CUỘC GẦN NHẤT ===
+        
+        // 5. Display the filtered meetings (using meetingsToShow)
+        container.innerHTML = meetingsToShow.map(meeting => {
           const roleTag = meeting.chairperson === currentEmail ? '🎤 Chủ tọa' : 
                          meeting.secretary === currentEmail ? '📝 Thư ký' : 
                          meeting.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
           
           const allMembers = [];
-          if (meeting.chairperson) allMembers.push(`🎤 ${meeting.chairperson}`);
-          if (meeting.secretary) allMembers.push(`📝 ${meeting.secretary}`);
+          if (meeting.chairperson) allMembers.push(`🎤 Chủ tọa: ${meeting.chairperson}`);
+          if (meeting.secretary) allMembers.push(`📝 Thư ký: ${meeting.secretary}`);
           if (meeting.members && meeting.members.length > 0) {
-            meeting.members.forEach(m => allMembers.push(`👤 ${m}`));
+            meeting.members.forEach(m => allMembers.push(`👤 Thành viên: ${m}`));
           }
           
-          const isChairperson = meeting.chairperson === currentEmail;
+          const relativeTimeHtml = getRelativeTime(meeting.startDatetime, meeting.endDatetime); // ADDED
+          
           const isSecretary = meeting.secretary === currentEmail;
-          const canEditDocuments = isChairperson || isSecretary;
+          const canEditDocuments = isSecretary; 
 
           const existingLinks = meeting.documentLinks || [];
           const safeTitle = meeting.title ? meeting.title.replace(/'/g, "\\'") : 'N/A';
@@ -652,12 +1083,11 @@
           const documentsHtml = existingLinks.length > 0 
             ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
                 <p style="margin-bottom: 6px; font-weight: 600;">📄 Tài liệu đính kèm:</p>
-                ${existingLinks.slice(0, 2).map(link => 
+                ${existingLinks.map(link => 
                     `<p style="font-size: 13px; margin: 2px 0;">
-                        <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link.length > 50 ? link.substring(0, 50) + '...' : link}</a>
+                        <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link}</a>
                     </p>`
                 ).join('')}
-                ${existingLinks.length > 2 ? `<p style="font-size: 13px; color: #999;">... và ${existingLinks.length - 2} link khác</p>` : ''}
               </div>`
             : `<p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
 
@@ -706,11 +1136,12 @@
             <div class="meeting-card">
               <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; gap: 8px;">
                 <h3 style="margin: 0; flex: 1;">🗓️ ${meeting.title || 'Không có tên'}</h3>
-                <span style="background: #999; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
+                <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
               </div>
               <p><strong>🎤 Chủ tọa:</strong> ${meeting.chairperson || 'N/A'}</p>
               <p><strong>📝 Thư ký:</strong> ${meeting.secretary || 'N/A'}</p>
               <p class="time" style="margin: 8px 0;"><strong>⏰ Thời gian:</strong><br>${formatDate(meeting.startDatetime)}<br>${formatTime(meeting.startDatetime)} - ${formatTime(meeting.endDatetime)}</p>
+              <p style="margin-bottom: 8px;">${relativeTimeHtml}</p>
               <p><strong>📍 Địa điểm:</strong><br>${meeting.meetingLink || 'N/A'}</p>
               <p><strong>✨ Người tạo:</strong> ${meeting.createdBy || 'N/A'}</p>
               ${membersHtml}
@@ -733,141 +1164,6 @@
       return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     }
     
-    function getMeetingStatus(startDatetime) {
-      const now = new Date();
-      const start = new Date(startDatetime);
-      const diffMs = start - now;
-
-      if (diffMs <= 0) return { text: 'Đã bắt đầu/Quá giờ', color: '#999999' };
-
-      const diffSec = Math.floor(diffMs / 1000);
-      const diffMin = Math.floor(diffSec / 60);
-      const diffHour = Math.floor(diffMin / 60);
-      const diffDay = Math.floor(diffHour / 24);
-
-      let text;
-      let color;
-
-      if (diffDay > 1) { 
-        text = `Còn ${diffDay} ngày`;
-        color = '#4caf50';
-      } else if (diffHour >= 1) { 
-        const remainingMinutes = diffMin % 60;
-        text = `Còn ${diffHour} giờ ${remainingMinutes} phút`;
-        color = '#ff9800';
-      } else if (diffMin > 0) { 
-        text = `Còn ${diffMin} phút`;
-        color = '#d32f2f';
-      } else { 
-        text = 'Trong vài giây nữa';
-        color = '#d32f2f';
-      }
-      
-      return { text, color };
-    }
-      
-    function loadUpcomingMeetings() {
-      const container = document.getElementById('upcomingContainer');
-      if (!container) return;
-
-      const currentEmail = sessionStorage.getItem('email');
-      const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
-      
-      window.firebaseOnValue(meetingsRef, (snapshot) => {
-        let upcomingMeetings = [];
-        const data = snapshot.val();
-
-        if (!data) {
-          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào</p>';
-          return;
-        }
-
-        const now = new Date();
-
-        Object.keys(data).forEach(key => {
-          const meeting = { id: key, ...data[key] };
-          
-          const isChairperson = meeting.chairperson === currentEmail;
-          const isSecretary = meeting.secretary === currentEmail;
-          const isParticipant = meeting.members && meeting.members.includes(currentEmail);
-          const isCreator = meeting.createdBy === currentEmail;
-
-          if (isChairperson || isSecretary || isParticipant || isCreator) {
-            const meetingStart = new Date(meeting.startDatetime);
-            
-            if (meetingStart > now) {
-              upcomingMeetings.push({
-                ...meeting,
-                startTime: meetingStart.getTime()
-              });
-            }
-          }
-        });
-
-        upcomingMeetings.sort((a, b) => a.startTime - b.startTime);
-        upcomingMeetings = upcomingMeetings.slice(0, 10);
-
-        if (upcomingMeetings.length === 0) {
-          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp sắp tới của bạn</p>';
-          return;
-        }
-
-        container.innerHTML = upcomingMeetings.map(meeting => {
-          const roleTag = meeting.chairperson === currentEmail ? '🎤 Chủ tọa' : 
-                         meeting.secretary === currentEmail ? '📝 Thư ký' : 
-                         meeting.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
-          
-          const allMembers = [];
-          if (meeting.chairperson) allMembers.push(`🎤 ${meeting.chairperson}`);
-          if (meeting.secretary) allMembers.push(`📝 ${meeting.secretary}`);
-          if (meeting.members && meeting.members.length > 0) {
-            meeting.members.forEach(m => allMembers.push(`👤 ${m}`));
-          }
-          
-          const documentsHtml = meeting.documentLinks && meeting.documentLinks.length > 0 
-            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
-                <p style="margin-bottom: 6px; font-weight: 600;">📄 Tài liệu:</p>
-                ${meeting.documentLinks.map(link => 
-                  `<p style="font-size: 13px; margin: 2px 0;">
-                    <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link.length > 50 ? link.substring(0, 50) + '...' : link}</a>
-                  </p>`).join('')}
-              </div>`
-            : `<p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
-          
-          const membersHtml = allMembers.length > 0
-            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
-                <p style="margin-bottom: 6px; font-weight: 600;">👥 Danh sách tham gia (${allMembers.length}):</p>
-                ${allMembers.map(m => `<p style="font-size: 13px; margin: 2px 0; color: #444;">${m}</p>`).join('')}
-              </div>`
-            : '';
-          
-          const status = getMeetingStatus(meeting.startDatetime); 
-          const timeRemaining = status.text;
-          const urgencyColor = status.color;
-
-          return `
-            <div class="meeting-card">
-              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; gap: 8px;">
-                <h3 style="margin: 0; flex: 1;">🗓️ ${meeting.title || 'Không có tên'}</h3>
-                <div style="display:flex; flex-direction: column; gap: 4px; align-items: flex-end;"> 
-                  <span style="background: ${urgencyColor}; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">⏳ ${timeRemaining}</span> 
-                  <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
-                </div>
-              </div>
-              <p><strong>🎤 Chủ tọa:</strong> ${meeting.chairperson || 'N/A'}</p>
-              <p><strong>📝 Thư ký:</strong> ${meeting.secretary || 'N/A'}</p>
-              <p class="time" style="margin: 8px 0;"><strong>⏰ Thời gian:</strong><br>${formatDate(meeting.startDatetime)}<br>${formatTime(meeting.startDatetime)} - ${formatTime(meeting.endDatetime)}</p>
-              <p><strong>📍 Địa điểm:</strong><br>${meeting.meetingLink || 'N/A'}</p>
-              <p><strong>✨ Người tạo:</strong> ${meeting.createdBy || 'N/A'}</p>
-              ${membersHtml}
-              ${documentsHtml}
-              <p style="font-size: 11px; color: #999; margin-top: 12px; padding-top: 8px; border-top: 1px solid #f0f0f0;">📅 Được tạo: ${new Date(meeting.createdAt).toLocaleString('vi-VN')}</p>
-            </div>
-          `;
-        }).join('');
-      });
-    }
-
     function updateParticipantDropdown() {
       const select = document.getElementById('participantSelect');
       const chairperson = document.getElementById('chairperson').value;
@@ -878,7 +1174,7 @@
       
       select.innerHTML = '<option value="">-- Chọn thành viên --</option>';
       
-      SYSTEM_EMAILS.forEach(email => {
+      allSystemEmails.forEach(email => {
         if (!excludedEmails.includes(email) && !selectedParticipants.includes(email)) {
           const option = document.createElement('option');
           option.value = email;
@@ -897,12 +1193,14 @@
       updateParticipantsList();
       updateParticipantDropdown();
     }
+    window.addParticipant = addParticipant;
 
     function removeParticipant(email) {
       selectedParticipants = selectedParticipants.filter(e => e !== email);
       updateParticipantsList();
       updateParticipantDropdown();
     }
+    window.removeParticipant = removeParticipant;
 
     function updateParticipantsList() {
       const listDiv = document.getElementById('participantsList');
@@ -938,7 +1236,7 @@
           chairperson: document.getElementById('chairperson').value,
           secretary: document.getElementById('secretary').value,
           members: selectedParticipants,
-          meetingLink: document.getElementById('location').value,
+          meetingLink: document.getElementById('location').value, // GET value from SELECT
           documentLinks: documentLinks,
           createdBy: sessionStorage.getItem('email'),
           createdAt: new Date().toISOString(),
@@ -954,6 +1252,10 @@
 
         if (meetingData.chairperson === meetingData.secretary) {
           throw new Error('Chủ tọa và thư ký không thể là cùng một người!');
+        }
+        
+        if (!meetingData.meetingLink) {
+             throw new Error('Vui lòng chọn Địa điểm họp!');
         }
 
         const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
@@ -979,6 +1281,8 @@
         document.getElementById('startTime').value = now.toISOString().slice(0, 16);
         const endTime = new Date(now.getTime() + 60 * 60 * 1000);
         document.getElementById('endTime').value = endTime.toISOString().slice(0, 16);
+        
+        updateParticipantDropdown(); 
 
       } catch (error) {
         console.error('Lỗi:', error.message);
@@ -989,6 +1293,7 @@
         submitBtn.textContent = '✨ Tạo cuộc họp';
       }
     }
+    window.handleSubmit = handleSubmit;
 
     function logout() {
       if (confirm('Bạn có chắc muốn đăng xuất?')) {
@@ -996,6 +1301,7 @@
         window.location.href = 'index.html';
       }
     }
+    window.logout = logout;
 
     window.onload = checkAuth;
   </script>
