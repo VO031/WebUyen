@@ -9,7 +9,7 @@
     body { 
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
+      min-height: 10vh;
       padding: 25px;
     }
     .container { max-width: 1200px; margin: 0 auto; }
@@ -244,6 +244,24 @@
         color: #444;
     }
     #noMeetingsFound { color: #999; font-style: italic; }
+
+    /* New styles for email button in success message */
+    .btn-send-email {
+        background: #ffc107; 
+        color: #1a1a1a; 
+        border: none; 
+        padding: 10px 20px; 
+        border-radius: 8px; 
+        cursor: pointer; 
+        font-size: 15px; 
+        font-weight: 700; 
+        transition: all 0.3s; 
+        margin-top: 15px; 
+        text-decoration: none;
+        display: inline-block;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .btn-send-email:hover { background: #ffb300; transform: translateY(-2px); }
   </style>
 </head>
 <body>
@@ -337,7 +355,7 @@
     // CALENDAR VARIABLES
     let currentYear = new Date().getFullYear();
     let currentMonth = new Date().getMonth();
-    const DAYS_OF_WEEK = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+    const DAYS_OF_WEEK = ['T2', 'T3', 'T4', 'T5', 'T6', 'CN'];
     let allMeetings = {}; // Store all fetched meetings by date 'YYYY-MM-DD'
     let rawAllMeetings = {}; // Store all fetched meetings by ID
 
@@ -405,7 +423,16 @@
 
           <div id="create" class="tab-content active">
             <div id="errorMessage" class="error-message"></div>
-            <div id="successMessage" class="success-message">✅ Tạo cuộc họp thành công!</div>
+            <div id="successMessage" class="success-message">
+                ✅ **Tạo cuộc họp thành công!**<br>
+                <div id="emailPrompt" style="margin-top: 10px; font-weight: normal;">
+                    Nhấn nút dưới đây để mở **Gmail** và soạn thư mời tham gia cuộc họp cho tất cả thành viên:
+                    <span id="emailButtonContainer"></span>
+                    <p style="font-size: 12px; color: #4CAF50; margin-top: 10px; font-weight: 600;">
+                        💡 Nút này sẽ mở trực tiếp trang soạn thảo Email của Gmail.
+                    </p>
+                </div>
+            </div>
             <h2>📅 Tạo cuộc họp mới</h2>
             
             <form id="meetingForm" onsubmit="handleSubmit(event)">
@@ -537,8 +564,7 @@
       // Load all meetings into memory once when the dashboard is shown
       loadAllMeetingsToMemory(); 
     }
-    
-    // NEW FUNCTION: Load all meetings into memory
+
     function loadAllMeetingsToMemory() {
         const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
         window.firebaseOnValue(meetingsRef, (snapshot) => {
@@ -1170,6 +1196,12 @@
       return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     }
     
+    function formatDateTime(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + 
+               date.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' });
+    }
+    
     function updateParticipantDropdown() {
       const select = document.getElementById('participantSelect');
       const chairperson = document.getElementById('chairperson').value;
@@ -1221,7 +1253,58 @@
         </div>
       `).join('');
     }
-    
+
+    /**
+     * Checks if any of the new meeting participants (Chairperson, Secretary, Members, Creator) 
+     * are already involved in another meeting during the new meeting's time slot.
+     * @param {string} newStartTimeStr - New meeting start time (ISO string).
+     * @param {string} newEndTimeStr - New meeting end time (ISO string).
+     * @param {string[]} newParticipants - Array of emails for all unique participants (Chairperson, Secretary, Members, Creator).
+     * @returns {{conflict: boolean, email: string, meetingTitle: string}|null} - Conflict object or null if no conflict.
+     */
+    function checkParticipantConflict(newStartTimeStr, newEndTimeStr, newParticipants) {
+        const newStart = new Date(newStartTimeStr).getTime();
+        const newEnd = new Date(newEndTimeStr).getTime();
+        
+        // Convert all participant emails to lowercase for case-insensitive check
+        const newParticipantsLower = newParticipants.map(e => e.toLowerCase()).filter(e => e); // Remove empty strings
+        
+        const allMeetingsData = rawAllMeetings; 
+
+        for (const key in allMeetingsData) {
+            const existingMeeting = allMeetingsData[key];
+            const existingStart = new Date(existingMeeting.startDatetime).getTime();
+            const existingEnd = new Date(existingMeeting.endDatetime).getTime();
+            
+            // 1. Check for Time overlap: (NewStart < ExistingEnd) AND (NewEnd > ExistingStart)
+            if (newStart < existingEnd && newEnd > existingStart) {
+                
+                // 2. Check for Participant overlap
+                const existingParticipants = [];
+                // Collect existing participants (Chairperson, Secretary, Creator, Members)
+                if (existingMeeting.chairperson) existingParticipants.push(existingMeeting.chairperson.toLowerCase());
+                if (existingMeeting.secretary) existingParticipants.push(existingMeeting.secretary.toLowerCase());
+                if (existingMeeting.createdBy) existingParticipants.push(existingMeeting.createdBy.toLowerCase());
+                if (existingMeeting.members && Array.isArray(existingMeeting.members)) {
+                    existingMeeting.members.forEach(member => existingParticipants.push(member.toLowerCase()));
+                }
+                
+                for (const newEmail of newParticipantsLower) {
+                    if (existingParticipants.includes(newEmail)) {
+                        // Conflict found
+                        return {
+                            conflict: true,
+                            email: newEmail,
+                            meetingTitle: existingMeeting.title || 'Cuộc họp không có tên'
+                        };
+                    }
+                }
+            }
+        }
+        
+        return null; // No conflict found
+    }
+
     /**
      * Checks if the new meeting time overlaps with any existing meetings in the same room.
      * @param {string} newStartTimeStr - New meeting start time (ISO string).
@@ -1255,14 +1338,83 @@
         return null; // No conflict found
     }
 
+    /**
+     * Generates a Gmail compose link for the meeting invitation.
+     * @param {object} meetingData - The data of the newly created meeting.
+     * @param {string} currentEmail - The email of the user who created the meeting.
+     * @returns {string} - The Gmail compose URL.
+     */
+    function createMailtoLink(meetingData, currentEmail) {
+        
+        // 1. Danh sách tất cả người liên quan (bao gồm cả người tạo)
+        let allInvolvedEmails = [
+            meetingData.chairperson, 
+            meetingData.secretary, 
+            ...(meetingData.members || []), 
+            currentEmail
+        ].filter(e => e);
+        
+        // Loại bỏ trùng lặp và loại bỏ người tạo khỏi danh sách thành viên nếu họ đã có vai trò Chủ tọa/Thư ký
+        const uniqueRecipients = [...new Set(allInvolvedEmails)];
+        
+        // 2. Chủ tọa và Thư ký vào TO
+        let toRecipients = [meetingData.chairperson, meetingData.secretary].filter(e => e);
+        toRecipients = [...new Set(toRecipients)];
+
+        // 3. Các thành viên còn lại (bao gồm người tạo nếu họ không phải là Chủ tọa/Thư ký) vào CC
+        // Lấy tất cả email duy nhất trừ những người đã có trong TO
+        let ccRecipients = uniqueRecipients.filter(e => !toRecipients.includes(e)); 
+        
+        const subject = `[THÔNG BÁO] Lịch họp: ${meetingData.title} - ${meetingData.meetingLink}`;
+        
+        let bodyContent = `Kính gửi các anh/chị,
+        
+Tôi xin thông báo về cuộc họp đã được lên lịch như sau:
+        
+- Tên cuộc họp: ${meetingData.title}
+- Thời gian: ${formatDateTime(meetingData.startDatetime)} - ${formatTime(meetingData.endDatetime)}
+- Địa điểm: ${meetingData.meetingLink}
+- Chủ tọa: ${meetingData.chairperson}
+- Thư ký: ${meetingData.secretary}
+- Người tạo lịch: ${meetingData.createdBy}
+        
+`;
+        if (meetingData.members && meetingData.members.length > 0) {
+            bodyContent += `- Thành viên tham gia khác: ${meetingData.members.join(', ')}\n`;
+        }
+        
+        if (meetingData.documentLinks && meetingData.documentLinks.length > 0) {
+            bodyContent += `\n\n--- Tài liệu đính kèm ---\n`;
+            meetingData.documentLinks.forEach((link, index) => {
+                bodyContent += `${index + 1}. ${link}\n`;
+            });
+        }
+        
+        bodyContent += `\n\nĐây là email thông báo tự động từ hệ thống Quản lý cuộc họp. Vui lòng phản hồi nếu có bất kỳ vấn đề gì.`;
+
+        // CHUYỂN TỪ mailto: SANG LINK GMAIL
+        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1` +
+                         `&to=${encodeURIComponent(toRecipients.join(','))}` +
+                         `&cc=${encodeURIComponent(ccRecipients.join(','))}` +
+                         `&su=${encodeURIComponent(subject)}` +
+                         `&body=${encodeURIComponent(bodyContent)}`;
+                       
+        return gmailUrl;
+    }
+    window.createMailtoLink = createMailtoLink;
+
+
     async function handleSubmit(event) {
       event.preventDefault();
       const submitBtn = document.getElementById('submitBtn');
       const errorMsg = document.getElementById('errorMessage');
       const successMsg = document.getElementById('successMessage');
+      const emailButtonContainer = document.getElementById('emailButtonContainer');
+
 
       submitBtn.disabled = true;
       submitBtn.textContent = '⏳ Đang lưu...';
+      emailButtonContainer.innerHTML = ''; // Clear previous button
 
       try {
         const startTimeStr = document.getElementById('startTime').value;
@@ -1270,6 +1422,8 @@
         const chairperson = document.getElementById('chairperson').value;
         const secretary = document.getElementById('secretary').value;
         const location = document.getElementById('location').value;
+        const meetingTitle = document.getElementById('meetingName').value;
+        const currentCreatorEmail = sessionStorage.getItem('email');
 
         if (new Date(startTimeStr) >= new Date(endTimeStr)) {
           throw new Error('Thời gian kết thúc phải sau thời gian bắt đầu!');
@@ -1283,19 +1437,35 @@
              throw new Error('Vui lòng chọn Địa điểm họp!');
         }
         
-        // --- NEW CONFLICT CHECK LOGIC ---
+        // --- CONFLICT CHECK LOGIC (ROOM) ---
         const conflictingMeetingTitle = checkConflict(startTimeStr, endTimeStr, location);
         
         if (conflictingMeetingTitle) {
             throw new Error(`Phòng họp **${location}** đã được đặt cho cuộc họp: **${conflictingMeetingTitle}**. Vui lòng chọn phòng hoặc thời gian khác.`);
         }
-        // --- END CONFLICT CHECK LOGIC ---
+        // --- END CONFLICT CHECK LOGIC (ROOM) ---
+        
+        // --- CONFLICT CHECK LOGIC (PARTICIPANTS) ---
+        // Combine all participants including creator for a comprehensive check
+        const allParticipantsForConflictCheck = [
+            chairperson, 
+            secretary, 
+            ...selectedParticipants,
+            currentCreatorEmail
+        ].filter((value, index, self) => value && self.indexOf(value) === index); // Unique and non-empty list of all involved people
+        
+        const participantConflict = checkParticipantConflict(startTimeStr, endTimeStr, allParticipantsForConflictCheck);
+        
+        if (participantConflict) {
+            throw new Error(`Thành viên **${participantConflict.email}** đã có lịch họp trùng: **${participantConflict.meetingTitle}**. Vui lòng thay đổi thành viên hoặc thời gian.`);
+        }
+        // --- END CONFLICT CHECK LOGIC (PARTICIPANTS) ---
         
         const documentLinksInputs = document.querySelectorAll('#documentLinksContainer .document-link-input');
         const documentLinks = Array.from(documentLinksInputs).map(input => input.value.trim()).filter(link => link);
         
         const meetingData = {
-          title: document.getElementById('meetingName').value,
+          title: meetingTitle,
           startDatetime: startTimeStr,
           endDatetime: endTimeStr,
           chairperson: chairperson,
@@ -1303,11 +1473,11 @@
           members: selectedParticipants,
           meetingLink: location, 
           documentLinks: documentLinks,
-          createdBy: sessionStorage.getItem('email'),
+          createdBy: currentCreatorEmail,
           createdAt: new Date().toISOString(),
           startTimestamp: new Date(startTimeStr).getTime(),
           endTimestamp: new Date(endTimeStr).getTime(),
-          host: sessionStorage.getItem('email'),
+          host: currentCreatorEmail,
           isNotified: false
         };
 
@@ -1315,12 +1485,20 @@
         const newMeetingRef = window.firebasePush(meetingsRef);
         await window.firebaseSet(newMeetingRef, meetingData);
 
+        // --- EMAIL NOTIFICATION GENERATION (Now using Gmail URL) ---
+        const mailtoLink = createMailtoLink(meetingData, currentCreatorEmail);
+        emailButtonContainer.innerHTML = `
+            <a href="${mailtoLink}" target="_blank" class="btn-send-email">
+                📧 Mở Gmail gửi Thông báo
+            </a>
+        `;
+        // --- END EMAIL NOTIFICATION GENERATION ---
+
+
         console.log('✅ Lưu cuộc họp thành công!', meetingData);
         errorMsg.classList.remove('show');
         successMsg.classList.add('show');
         
-        setTimeout(() => { successMsg.classList.remove('show'); }, 3000);
-
         // Reset form
         document.getElementById('meetingForm').reset();
         document.getElementById('documentLinksContainer').innerHTML = '';
