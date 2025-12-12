@@ -339,6 +339,7 @@
     let currentMonth = new Date().getMonth();
     const DAYS_OF_WEEK = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
     let allMeetings = {}; // Store all fetched meetings by date 'YYYY-MM-DD'
+    let rawAllMeetings = {}; // Store all fetched meetings by ID
 
     let selectedParticipants = [];
     let currentMeetingId = null;
@@ -476,12 +477,18 @@
           <div id="calendar" class="tab-content">
             <h2>🗓️ Lịch cuộc họp của tôi</h2>
             
-            <div class="calendar-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div class="calendar-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <button class="nav-btn" onclick="changeMonth(-1)">&#9664; Tháng trước</button>
                 <h3 id="currentMonthYear" style="color: #667eea; font-weight: 700; margin: 0;"></h3>
                 <button class="nav-btn" onclick="changeMonth(1)">Tháng sau &#9654;</button>
             </div>
-
+            
+            <div class="form-group" style="margin-bottom: 15px;">
+              <label>Lọc theo Phòng</label>
+              <select id="calendarFilterRoom" onchange="loadCalendarMeetings()">
+                <option value="">-- Tất cả phòng --</option>
+                </select>
+            </div>
             <div class="calendar-grid-container" style="background: #f8f9fa; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
                 <div id="calendarDaysOfWeek" class="days-of-week"></div>
                 <div id="calendarGrid" class="calendar-grid"></div>
@@ -527,6 +534,23 @@
 
       addDocumentLinkInput();
       
+      // Load all meetings into memory once when the dashboard is shown
+      loadAllMeetingsToMemory(); 
+    }
+    
+    // NEW FUNCTION: Load all meetings into memory
+    function loadAllMeetingsToMemory() {
+        const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
+        window.firebaseOnValue(meetingsRef, (snapshot) => {
+            rawAllMeetings = snapshot.val() || {};
+            // If the user is on a tab that needs data, refresh it
+            if (document.getElementById('list').classList.contains('active')) {
+                loadMeetings();
+            }
+            if (document.getElementById('calendar').classList.contains('active')) {
+                loadCalendarMeetings();
+            }
+        });
     }
 
     function switchTab(tabName) {
@@ -535,6 +559,8 @@
       event.target.classList.add('active');
       document.getElementById(tabName).classList.add('active');
       
+      // Since rawAllMeetings is updated via onValue, loadMeetings/loadCalendarMeetings 
+      // can just process the data immediately.
       if (tabName === 'list') loadMeetings();
       if (tabName === 'calendar') loadCalendarMeetings(); 
     }
@@ -680,7 +706,13 @@
             modalMessage.style.color = '#2e7d32';
             modalMessage.style.borderLeftColor = '#4caf50';
             
-            loadMeetings();
+            // Reload relevant data (list or calendar, depending on where the user is)
+            if (document.getElementById('list').classList.contains('active')) {
+                loadMeetings();
+            }
+            if (document.getElementById('calendar').classList.contains('active')) {
+                loadCalendarMeetings();
+            }
             
             setTimeout(() => {
                 closeDocumentModal();
@@ -813,7 +845,7 @@
                   </div>`
                 : '';
 
-            const relativeTimeHtml = getRelativeTime(m.startDatetime, m.endDatetime); // ADDED
+            const relativeTimeHtml = getRelativeTime(m.startDatetime, m.endDatetime); 
             
             const existingLinks = m.documentLinks || [];
             const documentsHtml = existingLinks.length > 0 
@@ -925,39 +957,52 @@
     
     function loadCalendarMeetings() {
         renderDaysOfWeek();
-        const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
         const currentEmail = sessionStorage.getItem('email');
         
-        window.firebaseOnValue(meetingsRef, (snapshot) => {
-            const data = snapshot.val();
-            const meetingsByDate = {};
+        const filterRoomSelect = document.getElementById('calendarFilterRoom');
+        if (!filterRoomSelect) return; 
 
-            if (data) {
-                Object.keys(data).forEach(key => {
-                    const meeting = { id: key, ...data[key] };
+        // 1. Populate Room Filter options if empty
+        if (filterRoomSelect.options.length === 1) { 
+            const roomOptions = MEETING_ROOMS.map(room => `<option value="${room}">${room}</option>`).join('');
+            filterRoomSelect.insertAdjacentHTML('beforeend', roomOptions);
+        }
+        // 2. Get the current room filter value
+        const filterRoom = filterRoomSelect.value;
+        
+        const meetingsByDate = {};
+        const data = rawAllMeetings; // Use in-memory data
+
+        if (data) {
+            Object.keys(data).forEach(key => {
+                const meeting = { id: key, ...data[key] };
+                
+                // Filter by Room: true if filterRoom is empty OR meetingLink matches filterRoom
+                const matchesRoom = !filterRoom || meeting.meetingLink === filterRoom;
+                
+                const isChairperson = meeting.chairperson === currentEmail;
+                const isSecretary = meeting.secretary === currentEmail;
+                const isParticipant = meeting.members && meeting.members.includes(currentEmail);
+                const isCreator = meeting.createdBy === currentEmail;
+
+                // Only consider meetings the user is involved in AND room matches filter
+                if ((isChairperson || isSecretary || isParticipant || isCreator) && matchesRoom) { 
+                    const date = new Date(meeting.startDatetime);
+                    const dateKey = formatDateToKey(date);
                     
-                    const isChairperson = meeting.chairperson === currentEmail;
-                    const isSecretary = meeting.secretary === currentEmail;
-                    const isParticipant = meeting.members && meeting.members.includes(currentEmail);
-                    const isCreator = meeting.createdBy === currentEmail;
-
-                    if (isChairperson || isSecretary || isParticipant || isCreator) {
-                        const date = new Date(meeting.startDatetime);
-                        const dateKey = formatDateToKey(date);
-                        
-                        if (new Date(meeting.endDatetime) > new Date()) { 
-                            if (!meetingsByDate[dateKey]) {
-                                meetingsByDate[dateKey] = [];
-                            }
-                            meetingsByDate[dateKey].push(meeting);
+                    // Only show future/ongoing meetings on the calendar
+                    if (new Date(meeting.endDatetime) > new Date()) { 
+                        if (!meetingsByDate[dateKey]) {
+                            meetingsByDate[dateKey] = [];
                         }
+                        meetingsByDate[dateKey].push(meeting);
                     }
-                });
-            }
-            
-            allMeetings = meetingsByDate; 
-            renderCalendar(currentYear, currentMonth, allMeetings);
-        });
+                }
+            });
+        }
+        
+        allMeetings = meetingsByDate; 
+        renderCalendar(currentYear, currentMonth, allMeetings);
     }
     // END CALENDAR FUNCTIONS
 
@@ -967,7 +1012,7 @@
       const filterRoomSelect = document.getElementById('filterRoom');
       if (!container || !filterDateInput || !filterRoomSelect) return;
 
-      // 1. Populate Room Filter options if empty (for initial load)
+      // 1. Populate Room Filter options if empty
       if (filterRoomSelect.options.length === 1) { // Only '-- Tất cả phòng --' exists
           const roomOptions = MEETING_ROOMS.map(room => `<option value="${room}">${room}</option>`).join('');
           filterRoomSelect.insertAdjacentHTML('beforeend', roomOptions);
@@ -980,178 +1025,139 @@
       
       container.innerHTML = '<p style="text-align: center; padding: 20px; grid-column: 1/-1; color: #666;">Đang tải...</p>';
 
-      const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
-      
-      window.firebaseOnValue(meetingsRef, (snapshot) => {
-        const data = snapshot.val();
-        let allMeetings = [];
+      let filteredMeetings = [];
+      const data = rawAllMeetings; // Use in-memory data
 
-        if (!data) {
-          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào</p>';
-          return;
-        }
-        
-        // Lấy tất cả cuộc họp vào một mảng
-        Object.keys(data).forEach(key => {
-            allMeetings.push({ id: key, ...data[key] });
-        });
-        
-        // === BẮT ĐẦU LOGIC GHI ĐÈ KHI ĐỦ 50 NODE (Ghi đè) ===
-        const MEETING_LIMIT = 50; 
-        
-        if (allMeetings.length > MEETING_LIMIT) {
-            // Sắp xếp TẤT CẢ cuộc họp theo startDatetime (cũ nhất lên đầu)
-            allMeetings.sort((a, b) => new Date(a.startDatetime) - new Date(b.startDatetime));
-            
-            // Lấy những cuộc họp cũ nhất cần xóa (ví dụ: nếu có 52, xóa 2 cái đầu)
-            const meetingsToDelete = allMeetings.slice(0, allMeetings.length - MEETING_LIMIT); 
-            
-            console.warn(`⚠️ Vượt quá ${MEETING_LIMIT} cuộc họp. Đang xóa ${meetingsToDelete.length} cuộc họp cũ nhất...`);
-            
-            meetingsToDelete.forEach(m => {
-                const meetingNodeRef = window.firebaseRef(window.firebaseDB, `meetings/${m.id}`);
-                // Xóa node cũ nhất bằng cách set giá trị null
-                window.firebaseSet(meetingNodeRef, null); 
-            });
-            
-            // Dừng xử lý hiển thị ở đây. Listener onValue sẽ tự động chạy lại khi xóa xong.
-            return; 
-        }
-        // === KẾT THÚC LOGIC GHI ĐÈ KHI ĐỦ 50 NODE ===
+      if (!data || Object.keys(data).length === 0) {
+        container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Chưa có cuộc họp nào</p>';
+        return;
+      }
 
-        // 3. Filtering Logic (chỉ lọc những cuộc họp user có liên quan và theo điều kiện lọc)
-        let filteredMeetings = allMeetings.filter(meeting => {
-          const isChairperson = meeting.chairperson === currentEmail;
-          const isSecretary = meeting.secretary === currentEmail;
-          const isParticipant = meeting.members && meeting.members.includes(currentEmail);
-          const isCreator = meeting.createdBy === currentEmail;
+      Object.keys(data).forEach(key => {
+        const meeting = { id: key, ...data[key] };
+        
+        const isChairperson = meeting.chairperson === currentEmail;
+        const isSecretary = meeting.secretary === currentEmail;
+        const isParticipant = meeting.members && meeting.members.includes(currentEmail);
+        const isCreator = meeting.createdBy === currentEmail;
 
-          // Chỉ xem xét các cuộc họp mà người dùng tham gia
-          if (!(isChairperson || isSecretary || isParticipant || isCreator)) return false;
-            
-          // Lọc theo Phòng
+        // Only consider meetings the user is involved in
+        if (isChairperson || isSecretary || isParticipant || isCreator) {
+          
+          // Filter by Room
           const matchesRoom = !filterRoom || meeting.meetingLink === filterRoom;
-            
-          // Lọc theo Ngày
+          
+          // Filter by Date
           const meetingStartDate = meeting.startDatetime ? meeting.startDatetime.substring(0, 10) : '';
           const matchesDate = !filterDate || meetingStartDate === filterDate;
-            
-          return matchesRoom && matchesDate;
-        });
-
-        // 4. Sort by start date/time (earliest first) - Đảm bảo sắp xếp lại sau khi lọc để lấy 30 cái gần nhất chính xác
-        filteredMeetings.sort((a, b) => new Date(a.startDatetime) - new Date(b.startDatetime));
-
-        if (filteredMeetings.length === 0) {
-          container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Không tìm thấy cuộc họp nào theo điều kiện lọc.</p>';
-          return;
-        }
-
-        // === BẮT ĐẦU LOGIC GIỚI HẠN 30 CUỘC GẦN NHẤT (Chỉ hiện 30 cái gần nhất) ===
-        const MAX_MEETINGS_TO_SHOW = 30;
-        let meetingsToShow = filteredMeetings;
-        
-        if (filteredMeetings.length > MAX_MEETINGS_TO_SHOW) {
-            // Vì đã sắp xếp theo ngày tăng dần (cũ nhất -> mới nhất), 
-            // nên 30 phần tử cuối cùng là 30 cuộc họp gần nhất/sắp tới.
-            meetingsToShow = filteredMeetings.slice(-MAX_MEETINGS_TO_SHOW); 
-        }
-        // === KẾT THÚC LOGIC GIỚI HẠN 30 CUỘC GẦN NHẤT ===
-        
-        // 5. Display the filtered meetings (using meetingsToShow)
-        container.innerHTML = meetingsToShow.map(meeting => {
-          const roleTag = meeting.chairperson === currentEmail ? '🎤 Chủ tọa' : 
-                         meeting.secretary === currentEmail ? '📝 Thư ký' : 
-                         meeting.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
           
-          const allMembers = [];
-          if (meeting.chairperson) allMembers.push(`🎤 Chủ tọa: ${meeting.chairperson}`);
-          if (meeting.secretary) allMembers.push(`📝 Thư ký: ${meeting.secretary}`);
-          if (meeting.members && meeting.members.length > 0) {
-            meeting.members.forEach(m => allMembers.push(`👤 Thành viên: ${m}`));
+          if (matchesRoom && matchesDate) {
+             filteredMeetings.push(meeting);
           }
-          
-          const relativeTimeHtml = getRelativeTime(meeting.startDatetime, meeting.endDatetime); // ADDED
-          
-          const isSecretary = meeting.secretary === currentEmail;
-          const canEditDocuments = isSecretary; 
-
-          const existingLinks = meeting.documentLinks || [];
-          const safeTitle = meeting.title ? meeting.title.replace(/'/g, "\\'") : 'N/A';
-          const linksForEdit = existingLinks.map(link => link.replace(/'/g, "\\'"));
-          
-          const documentsHtml = existingLinks.length > 0 
-            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
-                <p style="margin-bottom: 6px; font-weight: 600;">📄 Tài liệu đính kèm:</p>
-                ${existingLinks.map(link => 
-                    `<p style="font-size: 13px; margin: 2px 0;">
-                        <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link}</a>
-                    </p>`
-                ).join('')}
-              </div>`
-            : `<p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
-
-          let editButtonText;
-          let editButtonColor;
-          if (canEditDocuments) {
-              if (existingLinks.length === 0) {
-                  editButtonText = '➕ Thêm Tài liệu';
-                  editButtonColor = '#4caf50';
-              } else {
-                  editButtonText = '✏️ Sửa Tài liệu';
-                  editButtonColor = '#ff9800';
-              }
-          }
-          
-          const viewEditButtons = `
-            <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
-                <button 
-                    style="background: #00bcd4; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;"
-                    onmouseover="this.style.background='#0097a7'" onmouseout="this.style.background='#00bcd4'"
-                    onclick="viewDocuments('${meeting.id}', '${safeTitle}', [${linksForEdit.map(l => `'${l}'`).join(', ')}])"
-                >
-                    👁️ Xem Tài liệu (${existingLinks.length})
-                </button>
-                ${canEditDocuments ? 
-                    `<button 
-                        style="background: ${editButtonColor}; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;"
-                        onmouseover="this.style.background='${editButtonColor === '#4caf50' ? '#388e3c' : '#f57c00'}'" onmouseout="this.style.background='${editButtonColor}'"
-                        onclick="showEditDocumentModal('${meeting.id}', '${safeTitle}', [${linksForEdit.map(l => `'${l}'`).join(', ')}], true)"
-                    >
-                        ${editButtonText}
-                    </button>`
-                    : ''
-                }
-            </div>
-          `;
-          
-          const membersHtml = allMembers.length > 0
-            ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
-                <p style="margin-bottom: 6px; font-weight: 600;">👥 Danh sách tham gia (${allMembers.length}):</p>
-                ${allMembers.map(m => `<p style="font-size: 13px; margin: 2px 0; color: #444;">${m}</p>`).join('')}
-              </div>`
-            : '';
-            
-          return `
-            <div class="meeting-card">
-              <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; gap: 8px;">
-                <h3 style="margin: 0; flex: 1;">🗓️ ${meeting.title || 'Không có tên'}</h3>
-                <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
-              </div>
-              <p><strong>🎤 Chủ tọa:</strong> ${meeting.chairperson || 'N/A'}</p>
-              <p><strong>📝 Thư ký:</strong> ${meeting.secretary || 'N/A'}</p>
-              <p class="time" style="margin: 8px 0;"><strong>⏰ Thời gian:</strong><br>${formatDate(meeting.startDatetime)}<br>${formatTime(meeting.startDatetime)} - ${formatTime(meeting.endDatetime)}</p>
-              <p style="margin-bottom: 8px;">${relativeTimeHtml}</p>
-              <p><strong>📍 Địa điểm:</strong><br>${meeting.meetingLink || 'N/A'}</p>
-              <p><strong>✨ Người tạo:</strong> ${meeting.createdBy || 'N/A'}</p>
-              ${membersHtml}
-              ${documentsHtml}
-              ${viewEditButtons}
-              <p style="font-size: 11px; color: #999; margin-top: 12px; padding-top: 8px; border-top: 1px solid #f0f0f0;">📅 Được tạo: ${new Date(meeting.createdAt).toLocaleString('vi-VN')}</p>
-            </div>
-          `;
-        }).join('');
+        }
       });
+
+      // 3. Sort by start date/time (earliest first)
+      filteredMeetings.sort((a, b) => new Date(a.startDatetime) - new Date(b.startDatetime));
+
+      if (filteredMeetings.length === 0) {
+        container.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #999;">Không tìm thấy cuộc họp nào theo điều kiện lọc.</p>';
+        return;
+      }
+      
+      // 4. Display the filtered meetings
+      container.innerHTML = filteredMeetings.map(meeting => {
+        const roleTag = meeting.chairperson === currentEmail ? '🎤 Chủ tọa' : 
+                       meeting.secretary === currentEmail ? '📝 Thư ký' : 
+                       meeting.createdBy === currentEmail ? '✨ Người tạo' : '👤 Thành viên';
+        
+        const allMembers = [];
+        if (meeting.chairperson) allMembers.push(`🎤 Chủ tọa: ${meeting.chairperson}`);
+        if (meeting.secretary) allMembers.push(`📝 Thư ký: ${meeting.secretary}`);
+        if (meeting.members && meeting.members.length > 0) {
+          meeting.members.forEach(m => allMembers.push(`👤 Thành viên: ${m}`));
+        }
+        
+        const relativeTimeHtml = getRelativeTime(meeting.startDatetime, meeting.endDatetime); // ADDED
+        
+        const isSecretary = meeting.secretary === currentEmail;
+        const canEditDocuments = isSecretary; 
+
+        const existingLinks = meeting.documentLinks || [];
+        const safeTitle = meeting.title ? meeting.title.replace(/'/g, "\\'") : 'N/A';
+        const linksForEdit = existingLinks.map(link => link.replace(/'/g, "\\'"));
+        
+        const documentsHtml = existingLinks.length > 0 
+          ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+              <p style="margin-bottom: 6px; font-weight: 600;">📄 Tài liệu đính kèm:</p>
+              ${existingLinks.map(link => 
+                  `<p style="font-size: 13px; margin: 2px 0;">
+                      <a href="${link}" target="_blank" style="color: #667eea; word-break: break-all;">${link}</a>
+                  </p>`
+              ).join('')}
+            </div>`
+          : `<p style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e0e0e0; font-weight: 600;">📄 Tài liệu đính kèm: <span style="font-weight: 400; color: #999;">Chưa có</span></p>`;
+
+        let editButtonText;
+        let editButtonColor;
+        if (canEditDocuments) {
+            if (existingLinks.length === 0) {
+                editButtonText = '➕ Thêm Tài liệu';
+                editButtonColor = '#4caf50';
+            } else {
+                editButtonText = '✏️ Sửa Tài liệu';
+                editButtonColor = '#ff9800';
+            }
+        }
+        
+        const viewEditButtons = `
+          <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">
+              <button 
+                  style="background: #00bcd4; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;"
+                  onmouseover="this.style.background='#0097a7'" onmouseout="this.style.background='#00bcd4'"
+                  onclick="viewDocuments('${meeting.id}', '${safeTitle}', [${linksForEdit.map(l => `'${l}'`).join(', ')}])"
+              >
+                  👁️ Xem Tài liệu (${existingLinks.length})
+              </button>
+              ${canEditDocuments ? 
+                  `<button 
+                      style="background: ${editButtonColor}; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;"
+                      onmouseover="this.style.background='${editButtonColor === '#4caf50' ? '#388e3c' : '#f57c00'}'" onmouseout="this.style.background='${editButtonColor}'"
+                      onclick="showEditDocumentModal('${meeting.id}', '${safeTitle}', [${linksForEdit.map(l => `'${l}'`).join(', ')}], true)"
+                  >
+                      ${editButtonText}
+                  </button>`
+                  : ''
+              }
+          </div>
+        `;
+        
+        const membersHtml = allMembers.length > 0
+          ? `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e0e0e0;">
+              <p style="margin-bottom: 6px; font-weight: 600;">👥 Danh sách tham gia (${allMembers.length}):</p>
+              ${allMembers.map(m => `<p style="font-size: 13px; margin: 2px 0; color: #444;">${m}</p>`).join('')}
+            </div>`
+          : '';
+          
+        return `
+          <div class="meeting-card">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px; gap: 8px;">
+              <h3 style="margin: 0; flex: 1;">🗓️ ${meeting.title || 'Không có tên'}</h3>
+              <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap;">${roleTag}</span>
+            </div>
+            <p><strong>🎤 Chủ tọa:</strong> ${meeting.chairperson || 'N/A'}</p>
+            <p><strong>📝 Thư ký:</strong> ${meeting.secretary || 'N/A'}</p>
+            <p class="time" style="margin: 8px 0;"><strong>⏰ Thời gian:</strong><br>${formatDate(meeting.startDatetime)}<br>${formatTime(meeting.startDatetime)} - ${formatTime(meeting.endDatetime)}</p>
+            <p style="margin-bottom: 8px;">${relativeTimeHtml}</p>
+            <p><strong>📍 Địa điểm:</strong><br>${meeting.meetingLink || 'N/A'}</p>
+            <p><strong>✨ Người tạo:</strong> ${meeting.createdBy || 'N/A'}</p>
+            ${membersHtml}
+            ${documentsHtml}
+            ${viewEditButtons}
+            <p style="font-size: 11px; color: #999; margin-top: 12px; padding-top: 8px; border-top: 1px solid #f0f0f0;">📅 Được tạo: ${new Date(meeting.createdAt).toLocaleString('vi-VN')}</p>
+          </div>
+        `;
+      }).join('');
     }
 
     function formatDate(dateStr) {
@@ -1215,6 +1221,39 @@
         </div>
       `).join('');
     }
+    
+    /**
+     * Checks if the new meeting time overlaps with any existing meetings in the same room.
+     * @param {string} newStartTimeStr - New meeting start time (ISO string).
+     * @param {string} newEndTimeStr - New meeting end time (ISO string).
+     * @param {string} newRoom - The room being booked.
+     * @returns {string|null} - The title of the conflicting meeting, or null if no conflict.
+     */
+    function checkConflict(newStartTimeStr, newEndTimeStr, newRoom) {
+        const newStart = new Date(newStartTimeStr).getTime();
+        const newEnd = new Date(newEndTimeStr).getTime();
+        
+        const allMeetingsData = rawAllMeetings; 
+
+        for (const key in allMeetingsData) {
+            const existingMeeting = allMeetingsData[key];
+            
+            // 1. Check for Room match
+            if (existingMeeting.meetingLink === newRoom) {
+                const existingStart = new Date(existingMeeting.startDatetime).getTime();
+                const existingEnd = new Date(existingMeeting.endDatetime).getTime();
+                
+                // 2. Check for Time overlap
+                // The new meeting overlaps if:
+                // (NewStart < ExistingEnd) AND (NewEnd > ExistingStart)
+                if (newStart < existingEnd && newEnd > existingStart) {
+                    return existingMeeting.title || 'Cuộc họp không có tên'; 
+                }
+            }
+        }
+        
+        return null; // No conflict found
+    }
 
     async function handleSubmit(event) {
       event.preventDefault();
@@ -1226,37 +1265,51 @@
       submitBtn.textContent = '⏳ Đang lưu...';
 
       try {
+        const startTimeStr = document.getElementById('startTime').value;
+        const endTimeStr = document.getElementById('endTime').value;
+        const chairperson = document.getElementById('chairperson').value;
+        const secretary = document.getElementById('secretary').value;
+        const location = document.getElementById('location').value;
+
+        if (new Date(startTimeStr) >= new Date(endTimeStr)) {
+          throw new Error('Thời gian kết thúc phải sau thời gian bắt đầu!');
+        }
+
+        if (chairperson === secretary) {
+          throw new Error('Chủ tọa và thư ký không thể là cùng một người!');
+        }
+        
+        if (!location) {
+             throw new Error('Vui lòng chọn Địa điểm họp!');
+        }
+        
+        // --- NEW CONFLICT CHECK LOGIC ---
+        const conflictingMeetingTitle = checkConflict(startTimeStr, endTimeStr, location);
+        
+        if (conflictingMeetingTitle) {
+            throw new Error(`Phòng họp **${location}** đã được đặt cho cuộc họp: **${conflictingMeetingTitle}**. Vui lòng chọn phòng hoặc thời gian khác.`);
+        }
+        // --- END CONFLICT CHECK LOGIC ---
+        
         const documentLinksInputs = document.querySelectorAll('#documentLinksContainer .document-link-input');
         const documentLinks = Array.from(documentLinksInputs).map(input => input.value.trim()).filter(link => link);
         
         const meetingData = {
           title: document.getElementById('meetingName').value,
-          startDatetime: document.getElementById('startTime').value,
-          endDatetime: document.getElementById('endTime').value,
-          chairperson: document.getElementById('chairperson').value,
-          secretary: document.getElementById('secretary').value,
+          startDatetime: startTimeStr,
+          endDatetime: endTimeStr,
+          chairperson: chairperson,
+          secretary: secretary,
           members: selectedParticipants,
-          meetingLink: document.getElementById('location').value, // GET value from SELECT
+          meetingLink: location, 
           documentLinks: documentLinks,
           createdBy: sessionStorage.getItem('email'),
           createdAt: new Date().toISOString(),
-          startTimestamp: new Date(document.getElementById('startTime').value).getTime(),
-          endTimestamp: new Date(document.getElementById('endTime').value).getTime(),
+          startTimestamp: new Date(startTimeStr).getTime(),
+          endTimestamp: new Date(endTimeStr).getTime(),
           host: sessionStorage.getItem('email'),
           isNotified: false
         };
-
-        if (new Date(meetingData.startDatetime) >= new Date(meetingData.endDatetime)) {
-          throw new Error('Thời gian kết thúc phải sau thời gian bắt đầu!');
-        }
-
-        if (meetingData.chairperson === meetingData.secretary) {
-          throw new Error('Chủ tọa và thư ký không thể là cùng một người!');
-        }
-        
-        if (!meetingData.meetingLink) {
-             throw new Error('Vui lòng chọn Địa điểm họp!');
-        }
 
         const meetingsRef = window.firebaseRef(window.firebaseDB, 'meetings');
         const newMeetingRef = window.firebasePush(meetingsRef);
@@ -1268,11 +1321,10 @@
         
         setTimeout(() => { successMsg.classList.remove('show'); }, 3000);
 
+        // Reset form
         document.getElementById('meetingForm').reset();
-        
         document.getElementById('documentLinksContainer').innerHTML = '';
         addDocumentLinkInput();
-
         selectedParticipants = [];
         updateParticipantsList();
 
@@ -1281,13 +1333,13 @@
         document.getElementById('startTime').value = now.toISOString().slice(0, 16);
         const endTime = new Date(now.getTime() + 60 * 60 * 1000);
         document.getElementById('endTime').value = endTime.toISOString().slice(0, 16);
-        
         updateParticipantDropdown(); 
 
       } catch (error) {
         console.error('Lỗi:', error.message);
         errorMsg.innerHTML = `<strong>⚠️ Lỗi:</strong> ${error.message}`;
         errorMsg.classList.add('show');
+        successMsg.classList.remove('show'); // Hide success if error occurs
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '✨ Tạo cuộc họp';
